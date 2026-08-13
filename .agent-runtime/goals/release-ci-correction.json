@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 15,
+  "revision": 23,
   "goal": {
     "id": "release-ci-correction",
     "intent": "Correct release workflow toolchain mismatch and require exact-head remote CI evidence before closure",
@@ -20,20 +20,63 @@
       {
         "id": "remote-evidence",
         "acceptance": "CI and CodeQL succeed on the exact final signed main commit",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/commit/c321d9793c7c0746c79bf057d9334366560727cd",
+            "result": "Exact PR #1 merge commit has successful post-merge CI run 31659620919 and CodeQL run 31659620195."
+          }
+        ]
       },
       {
         "id": "publication",
         "acceptance": "Signed correction commit is published to public main with a clean local checkout",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/1",
+            "result": "Signed branch commit merged to public main via PR without force-push or history rewrite."
+          }
+        ]
       }
     ],
     "non_goals": [
       "Change the Go 1.24 module compatibility baseline"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Corrective Goal closed only after signed PR #1 merged and all Ubuntu, macOS, govulncheck, CodeQL, Goal contract and documentation checks passed, followed by exact c321d97 post-merge CI and CodeQL success. Attempt-1 equivalent failures and pre-ACK d23667e repair remain immutable evidence. Initial closure is explicitly marked premature and corrected.",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/commit/c321d9793c7c0746c79bf057d9334366560727cd",
+            "result": "Exact merged main verified by successful CI 31659620919 and CodeQL 31659620195."
+          }
+        ],
+        "recorded_at": "2026-08-13T02:04:46.596164Z",
+        "closure": {
+          "achieved_outcome": "Go 1.24 compatibility retained; pinned govulncheck v1.6.0 runs under required Go 1.25 with GOTOOLCHAIN=local, machine drift guards and visible toolchain evidence.",
+          "cleanup": "No parent/sibling edits; no main rewrite after ACK; temporary artifacts remain outside repository; corrective branch merged through PR.",
+          "remaining": [
+            {
+              "kind": "risk",
+              "summary": "Repository rules did not hold auto-merge for pending checks; required-check configuration must be hardened before future releases."
+            }
+          ],
+          "next_work": [
+            {
+              "type": "file",
+              "reference": "ROADMAP.md",
+              "result": "Canonical follow-up queue; branch-protection required-check hardening must be tracked before release tagging."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Asked what may have been forgotten: checked both setup-go occurrences after initially patching the wrong repeated block and corrected it before commit; verified test stays 1.24 and scanner is 1.25. Checked pending signed-head CI, CodeQL, dirty state and journal lifecycle. Remote exact-head evidence remains intentionally pending.",
@@ -120,6 +163,11 @@
             "type": "command",
             "reference": "workflow inspection; git diff; parent boundary inspection",
             "result": "Only agent-runtime CI configuration and its corrective Goal journal changed; terms and versions match tool requirements."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/1",
+            "result": "Signed corrective PR merged without rewriting main; branch/root contract, docs, tests and Goal evidence reconciled."
           }
         ],
         "recorded_at": "2026-08-13T01:55:29.88865Z"
@@ -144,12 +192,32 @@
             "type": "test",
             "reference": "go test -race ./...; go vet ./...; govulncheck@v1.6.0 ./...; git diff --check",
             "result": "All independent local commands exited 0; govulncheck found no called vulnerabilities."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659609346",
+            "result": "PR #1 CI passed: Ubuntu test, macOS test, govulncheck with visible toolchain summary, and CI contract guard."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659607591",
+            "result": "PR #1 CodeQL Analyze (go) passed."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659620919",
+            "result": "Exact merged main c321d9793c7c0746c79bf057d9334366560727cd post-merge CI passed."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659620195",
+            "result": "Exact merged main c321d9793c7c0746c79bf057d9334366560727cd post-merge CodeQL passed."
           }
         ],
         "recorded_at": "2026-08-13T01:55:29.925066Z"
       }
     },
     "created_at": "2026-08-13T01:54:47.826811Z",
-    "updated_at": "2026-08-13T02:02:09.575994Z"
+    "updated_at": "2026-08-13T02:04:46.596164Z"
   }
 }
