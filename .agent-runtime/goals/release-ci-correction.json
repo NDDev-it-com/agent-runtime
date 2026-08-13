@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 9,
+  "revision": 15,
   "goal": {
     "id": "release-ci-correction",
     "intent": "Correct release workflow toolchain mismatch and require exact-head remote CI evidence before closure",
@@ -42,6 +42,16 @@
             "type": "command",
             "reference": "sed .github/workflows/ci.yml; independent local gates",
             "result": "Repeated configuration blocks are correct; local tests, vet, scanner and diff checks pass; remote proof not falsely claimed."
+          },
+          {
+            "type": "test",
+            "reference": "internal/cicontract/contract_test.go",
+            "result": "Machine guard added after ACK; negative tests reject scanner Go below 1.25.0 and compatibility lane drift above Go 1.24."
+          },
+          {
+            "type": "test",
+            "reference": "actionlint .github/workflows/*.yml",
+            "result": "Initial summary shell quoting produced SC2016; corrected before commit and actionlint now exits 0."
           }
         ],
         "recorded_at": "2026-08-13T01:55:29.916457Z"
@@ -54,6 +64,11 @@
             "type": "file",
             "reference": ".github/workflows/ci.yml",
             "result": "Test job uses 1.24.x; govulncheck job uses 1.25.x for scanner compatibility."
+          },
+          {
+            "type": "commit",
+            "reference": "d23667ee05f96e4e48e3b11c839fe36a265a67fa",
+            "result": "Pre-ACK direct-main draft repair changed scanner lane to Go 1.25 and produced green CI/CodeQL; preserved as diagnostic/repair evidence, not accepted terminal workflow."
           }
         ],
         "recorded_at": "2026-08-13T01:54:47.871783Z"
@@ -78,6 +93,21 @@
             "type": "link",
             "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659068188",
             "result": "govulncheck job failed before scanning: tool requires Go \u003e=1.25, runner used Go 1.24.13 with GOTOOLCHAIN=local."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659068188/job/94319843867",
+            "result": "Attempt-1 superseded 11197b govulncheck job log: pinned v1.6.0 rejected Go 1.24.13 because upstream requires Go \u003e=1.25."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659138001/job/94320054035",
+            "result": "Attempt-1 equivalent signed 41e3b govulncheck job log: identical configuration and identical Go \u003e=1.25 requirement failure; no intervening repair, so not a separate attempt."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/golang/vuln/blob/v1.6.0/go.mod",
+            "result": "Official upstream v1.6.0 module declares go 1.25.0."
           }
         ],
         "recorded_at": "2026-08-13T01:54:47.845642Z"
@@ -120,6 +150,6 @@
       }
     },
     "created_at": "2026-08-13T01:54:47.826811Z",
-    "updated_at": "2026-08-13T01:55:29.936461Z"
+    "updated_at": "2026-08-13T02:02:09.575994Z"
   }
 }

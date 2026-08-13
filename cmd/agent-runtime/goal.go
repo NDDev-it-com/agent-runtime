@@ -21,7 +21,7 @@ func (f *stringsFlag) Set(value string) error { *f = append(*f, value); return n
 
 func goalCommand(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return errors.New("usage: agent-runtime goal <init|status|add|check|advance>")
+		return errors.New("usage: agent-runtime goal <init|status|add|evidence|check|advance>")
 	}
 	switch args[0] {
 	case "init":
@@ -32,11 +32,39 @@ func goalCommand(args []string, stdout, stderr io.Writer) error {
 		return goalCheck(args[1:], stdout, stderr)
 	case "add":
 		return goalAdd(args[1:], stdout, stderr)
+	case "evidence":
+		return goalEvidence(args[1:], stdout, stderr)
 	case "advance":
 		return goalAdvance(args[1:], stdout, stderr)
 	default:
 		return fmt.Errorf("unknown goal command %q", args[0])
 	}
+}
+
+func goalEvidence(args []string, stdout, stderr io.Writer) error {
+	set, path, revision, err := goalMutationFlags("goal evidence", args, stderr, true)
+	if err != nil {
+		return err
+	}
+	phase := set.String("phase", "", "phase with an existing receipt")
+	evidence := evidenceFlags(set, "evidence")
+	if err := set.Parse(args); err != nil {
+		return err
+	}
+	if set.NArg() != 0 {
+		return errors.New("unexpected positional arguments")
+	}
+	if *revision == 0 {
+		return errors.New("--revision must be positive")
+	}
+	store := goalpkg.Store{Path: *path}
+	j, err := store.Update(*revision, func(j *goalpkg.Journal) error {
+		return j.AddReceiptEvidence(goalpkg.Phase(*phase), evidence.value(), time.Now())
+	})
+	if err != nil {
+		return err
+	}
+	return writeJSON(stdout, j)
 }
 
 func goalAdd(args []string, stdout, stderr io.Writer) error {

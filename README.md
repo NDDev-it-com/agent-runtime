@@ -102,6 +102,9 @@ journal restores the full checklist and evidence after restart or compaction.
 The canonical distributable schema is
 [`schemas/goal-journal-v1alpha1.schema.json`](schemas/goal-journal-v1alpha1.schema.json).
 
+Evidence discovered later can be appended to an existing receipt with
+`goal evidence`; receipt summaries and existing evidence remain immutable.
+
 The journal is designed for durable evidence, so commit it when it represents
 public project work. The adjacent `*.lock` file is ephemeral and ignored.
 

@@ -37,6 +37,16 @@ The file lock uses the platform `flock` API available on the supported macOS
 and Linux targets. Windows support requires a separate locking implementation
 and is not claimed by v0.
 
+## CI toolchain contract
+
+`security-tools.json` is the source of truth for the pinned vulnerability
+scanner, its upstream-declared minimum Go version, and the production
+compatibility lane. `cmd/check-ci-contract` verifies the workflow projection.
+Negative tests reject a scanner lane below the upstream requirement and reject
+movement of the Go 1.24 compatibility lane. CI disables automatic toolchain
+downloads with `GOTOOLCHAIN=local` and records both tool versions in the job
+summary.
+
 Closure is structurally distinct from an ordinary phase receipt. It records the
 achieved outcome, cleanup, typed remaining debt/risks, and canonical next work.
 The state machine refuses closure unless all eight receipts and every checklist
