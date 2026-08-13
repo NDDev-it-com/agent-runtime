@@ -60,10 +60,18 @@ covers every other asset and deliberately does not checksum itself.
    ambient GPG executable, keyring, home directory, global Git configuration or
    author identity. Trust changes require a reviewed contract, schema and key
    update and invalidate old or revoked material fail closed.
-4. Run `go run ./cmd/check-cold-compile`. It uses a fresh isolated build cache
-   for every supported `darwin/linux` and `amd64/arm64` combination, compiling
-   all packages, commands, tests and applicable platform files without running
-   cross-target test binaries.
+   GitHub REST `verification.payload` is the value that was signed and
+   `verification.signature` is the extracted signature. The verifier requires
+   the provider payload to equal Git's normative unsigned commit payload and
+   verifies both the provider pair and the locally embedded signature with the
+   pinned key. It does not confuse Git's multiline `gpgsig` header-continuation
+   whitespace with the extracted signature contract. Tree, ordered parents,
+   author and committer remain exactly bound to REST, GraphQL and the local
+   content-addressed commit object.
+4. Run `go run ./cmd/check-cold-compile`. It owns a fresh private driver, build
+   cache and work root for every supported `darwin/linux` and `amd64/arm64`
+   combination, verifies driver identity before and after compilation, and
+   compiles all applicable packages without running cross-target test binaries.
 5. Run `go run ./cmd/check-release-contract` and build twice from the same exact
    commit. Create only private parent directories and pass distinct non-existent
    final leaves. Use the canonical quoted `parent="$(mktemp -d)"` form; do not
