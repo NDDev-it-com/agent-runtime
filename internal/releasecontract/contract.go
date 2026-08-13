@@ -276,14 +276,15 @@ func (c Contract) VerifyWorkflow(data []byte) error {
 	required := []string{
 		"tags: ['v*.*.*']", "if: github.run_attempt == 1", "contents: read", "contents: write", "id-token: write", "attestations: write", "artifact-metadata: write",
 		"go run ./cmd/check-release-contract", "go run ./cmd/check-cold-compile", "go run ./cmd/check-signature --tag", provenance.IntegrationCommand, "--expected-commit", "verification.verified", "refs/heads/main", "gh release create", "--verify-tag", c.Actions.Checkout, c.Actions.SetupGo, c.Actions.AttestProvenance, c.Actions.AttestSBOM,
-		"--expect-version",
+		"--expect-version", `release_parent="$(mktemp -d "${RUNNER_TEMP}/agent-runtime-release.XXXXXX")"`, `release_dist="${release_parent}/release-dist"`, `release_result="${release_parent}/build-result.json"`, `--out "$release_dist"`, `--result "$release_result"`, `--verify-result "$release_result"`, `RELEASE_DIST=$release_dist`, `${{ env.RELEASE_DIST }}`,
 	}
 	for _, token := range required {
+		token = strings.ReplaceAll(token, "\\\"", "\"")
 		if !strings.Contains(s, token) {
 			return fmt.Errorf("release workflow missing required token %q", token)
 		}
 	}
-	for _, forbidden := range []string{"pull_request:", "branches: [main]", "workflow_dispatch:", "--clobber", "permissions: write-all", "secrets:", "environment:", "git config ", "git verify-tag"} {
+	for _, forbidden := range []string{"pull_request:", "branches: [main]", "workflow_dispatch:", "--clobber", "permissions: write-all", "secrets:", "environment:", "git config ", "git verify-tag", "${RUNNER_TEMP}/release-dist"} {
 		if strings.Contains(s, forbidden) {
 			return fmt.Errorf("release workflow contains forbidden publication surface %q", forbidden)
 		}

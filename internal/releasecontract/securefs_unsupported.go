@@ -8,7 +8,9 @@ import "errors"
 
 var errSecurePublicationUnsupported = errors.New("secure no-replace release publication is unsupported")
 
-func publishBundle(string, Contract, map[string][]byte) error { return errSecurePublicationUnsupported }
+func publishBundle(string, Contract, map[string][]byte) error {
+	return outputError(OutputInvalidParent, "secure publication capability", errSecurePublicationUnsupported)
+}
 func readBundleSecure(string, Contract) (map[string][]byte, error) {
 	return nil, errSecurePublicationUnsupported
 }

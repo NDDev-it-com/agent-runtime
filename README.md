@@ -85,6 +85,9 @@ go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.0
 Each tag-only release contains one deterministic tracked-source archive, an
 SPDX 2.3 JSON SBOM, canonical release notes, a release manifest, and
 `SHA256SUMS`. The annotated signed tag identifies the exact `main` commit;
+each dry-run or publication build also emits a versioned machine-readable build
+result that binds its canonical artifact root, source inputs and exact asset
+path/size/digest closure.
 GitHub OIDC/Sigstore attestations cover every material asset. See
 [`docs/releasing.md`](docs/releasing.md) for verification and rollback rules.
 The repository-owned [provenance contract](provenance/v1alpha1.json) separates

@@ -295,6 +295,71 @@ func TestBuildIsDeterministicClosedAndCanonical(t *testing.T) {
 	}
 }
 
+func TestBuildResultBindsCanonicalArtifactClosure(t *testing.T) {
+	t.Parallel()
+	root := fixtureRepo(t)
+	c := testContract()
+	parent := t.TempDir()
+	out := filepath.Join(parent, "bundle")
+	result, err := BuildWithResult(root, "HEAD", out, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := ValidateBuildResult(result, out, c); err != nil {
+		t.Fatal(err)
+	}
+	if result.SchemaVersion != BuildResultSchemaVersion || len(result.Assets) != len(c.Assets.Names()) {
+		t.Fatalf("unexpected result: %#v", result)
+	}
+	for i, name := range c.Assets.Names() {
+		if result.Assets[i].Name != name {
+			t.Fatalf("asset order drift: %#v", result.Assets)
+		}
+	}
+	mutations := []struct {
+		name string
+		edit func(*BuildResult)
+	}{
+		{"missing", func(r *BuildResult) { r.Assets = r.Assets[1:] }},
+		{"extra", func(r *BuildResult) { r.Assets = append(r.Assets, r.Assets[0]) }},
+		{"duplicate", func(r *BuildResult) { r.Assets[1] = r.Assets[0] }},
+		{"traversal", func(r *BuildResult) { r.Assets[0].Name = "../escape" }},
+		{"digest drift", func(r *BuildResult) { r.Assets[0].SHA256 = strings.Repeat("0", 64) }},
+		{"relocated output", func(r *BuildResult) { r.ArtifactRoot = filepath.Join(parent, "elsewhere") }},
+	}
+	for _, tc := range mutations {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			candidate := result
+			candidate.Assets = append([]AssetDigest(nil), result.Assets...)
+			tc.edit(&candidate)
+			if reflect.DeepEqual(candidate, result) {
+				t.Fatal("mutation did not change candidate")
+			}
+			if ValidateBuildResult(candidate, out, c) == nil {
+				t.Fatal("invalid build result accepted")
+			}
+		})
+	}
+}
+
+func TestBuildResultRejectsSymlinkAssetAndResidue(t *testing.T) {
+	t.Parallel()
+	root := fixtureRepo(t)
+	c := testContract()
+	out := filepath.Join(t.TempDir(), "bundle")
+	result, err := BuildWithResult(root, "HEAD", out, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(c.Assets.Archive, filepath.Join(out, "unexpected")); err != nil {
+		t.Fatal(err)
+	}
+	if ValidateBuildResult(result, out, c) == nil {
+		t.Fatal("unexpected symlink residue accepted")
+	}
+}
+
 func TestTreeRejectsUnsafeMembersAndBounds(t *testing.T) {
 	t.Parallel()
 	limits := testContract().Limits

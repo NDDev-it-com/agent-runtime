@@ -57,9 +57,13 @@ jobs:
           parent="$(mktemp -d)"
           first="$parent/first"
           second="$parent/second"
+          first_result="$parent/first-result.json"
+          second_result="$parent/second-result.json"
           trap 'rm -rf -- "$parent"' EXIT
-          go run ./cmd/check-release-contract --build --commit HEAD --out "$first"
-          go run ./cmd/check-release-contract --build --commit HEAD --out "$second"
+          go run ./cmd/check-release-contract --build --commit HEAD --out "$first" --result "$first_result"
+          go run ./cmd/check-release-contract --build --commit HEAD --out "$second" --result "$second_result"
+          go run ./cmd/check-release-contract --out "$first" --verify-result "$first_result"
+          go run ./cmd/check-release-contract --out "$second" --verify-result "$second_result"
           diff -rq "$first" "$second"
 
   govulncheck:

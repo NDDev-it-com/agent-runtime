@@ -22,9 +22,10 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	governance := readSchema(t, "schemas/repository-governance-v1alpha1.schema.json")
 	releaseContract := readSchema(t, "schemas/release-contract-v1alpha1.schema.json")
 	releaseManifest := readSchema(t, "schemas/release-manifest-v1alpha1.schema.json")
+	releaseBuildResult := readSchema(t, "schemas/release-build-result-v1alpha1.schema.json")
 	provenance := readSchema(t, "schemas/provenance-contract-v1alpha1.schema.json")
 	fuzz := readSchema(t, "schemas/fuzz-contract-v1alpha1.schema.json")
-	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance, "release contract": releaseContract, "release manifest": releaseManifest, "provenance": provenance, "fuzz": fuzz} {
+	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance, "release contract": releaseContract, "release manifest": releaseManifest, "release build result": releaseBuildResult, "provenance": provenance, "fuzz": fuzz} {
 		if schema["x-license"] != "AGPL-3.0-only" {
 			t.Errorf("%s schema license=%v", name, schema["x-license"])
 		}
