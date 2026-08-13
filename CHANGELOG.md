@@ -6,6 +6,29 @@ contract.
 
 ## [Unreleased]
 
+### Changed
+
+- `NewEmitter` rejects a maximum sensitivity above `internal`. An envelope may
+  only carry `public` and `internal` attributes, so a higher maximum let
+  redaction pass an attribute that envelope validation then rejected, discarding
+  the entire observation instead of the one attribute.
+- Identity validation no longer applies the redaction word list. Runtime, sink,
+  correlation, subject and actor identifiers are checked against the identity
+  grammar only.
+
+### Fixed
+
+- A Goal closure carrying both a debt and a risk always emits `goal.completed`.
+  The payload was validated before canonicalisation, so the randomised map order
+  behind `debt_kinds` rejected roughly one completion in ten and a durably
+  completed Goal silently lost its terminal event.
+- Task identities the manifest contract accepts are observable again. Applying
+  the redaction word list to identities rejected `run-command`, `fetch-url`,
+  `provider-sync`, `raw-dump` and `curl`, and the observation was discarded.
+- Opening a JSONL sink and replaying a JSONL file now share one definition of a
+  valid history. The sink accepted and appended to files whose per-stream
+  sequence was not increasing, which `ReplayJSONL` then rejected as corrupt.
+
 ## [0.1.0] - 2026-08-13
 
 ### Added

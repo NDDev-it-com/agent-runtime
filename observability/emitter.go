@@ -98,6 +98,12 @@ func NewEmitter(runtime Runtime, sinks []Sink, options Options) (*Emitter, error
 	if policy.MaxSensitivity == "" {
 		policy = DefaultPolicy()
 	}
+	// An envelope may only carry public or internal attributes, so a higher
+	// maximum would let Redact pass an attribute that envelope validation then
+	// rejects, discarding the whole observation. Refuse it at construction.
+	if policy.MaxSensitivity != SensitivityPublic && policy.MaxSensitivity != SensitivityInternal {
+		return nil, errors.New("maximum sensitivity must be public or internal")
+	}
 	clock := options.Clock
 	if clock == nil {
 		clock = time.Now
@@ -128,6 +134,10 @@ func (e *Emitter) Emit(ctx context.Context, draft Draft) (Envelope, DeliveryRepo
 	if e.closed {
 		return Envelope{}, DeliveryReport{}, errors.New("emitter is closed")
 	}
+	// Canonicalize before validating. The validator requires canonical collection
+	// order, so a draft whose collections were built from a Go map would otherwise
+	// be rejected for an ordering the emitter is about to impose anyway.
+	draft.Payload = canonicalPayload(draft.Payload)
 	if err := validateDraft(draft); err != nil {
 		return Envelope{}, DeliveryReport{}, err
 	}
@@ -145,8 +155,7 @@ func (e *Emitter) Emit(ctx context.Context, draft Draft) (Envelope, DeliveryRepo
 	if err != nil {
 		return Envelope{}, DeliveryReport{}, err
 	}
-	payload := canonicalPayload(draft.Payload)
-	wire := envelopeWire{SchemaVersion: SchemaVersion, Kind: draft.Kind, Subject: draft.Subject, CorrelationID: draft.CorrelationID, CausationID: draft.CausationID, Sequence: sequence, Timestamp: timestamp, Actor: draft.Actor, Runtime: e.runtime, Attempt: draft.Attempt, Outcome: draft.Outcome, Payload: payload, Attributes: attributes, Redactions: redactions}
+	wire := envelopeWire{SchemaVersion: SchemaVersion, Kind: draft.Kind, Subject: draft.Subject, CorrelationID: draft.CorrelationID, CausationID: draft.CausationID, Sequence: sequence, Timestamp: timestamp, Actor: draft.Actor, Runtime: e.runtime, Attempt: draft.Attempt, Outcome: draft.Outcome, Payload: draft.Payload, Attributes: attributes, Redactions: redactions}
 	wire.EventID = makeEventID(wire)
 	envelope := Envelope{wire: wire}
 	if _, err := envelope.CanonicalJSON(); err != nil {
