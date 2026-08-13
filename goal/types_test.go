@@ -3,12 +3,18 @@
 package goal
 
 import (
+	"encoding/json"
+	"strings"
+	"sync"
 	"testing"
 	"time"
 )
 
 var testNow = time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
-var testEvidence = []Evidence{{Type: EvidenceTest, Reference: "go test ./...", Result: "passed"}}
+
+func newTestEvidence() []Evidence {
+	return []Evidence{{Type: EvidenceTest, Reference: "go test ./...", Result: "passed"}}
+}
 
 func TestGoalRequiresExplicitAcceptance(t *testing.T) {
 	t.Parallel()
@@ -33,9 +39,9 @@ func TestGoalCannotCompleteWithOnlyVerifyReceipt(t *testing.T) {
 	t.Parallel()
 	j := newTestJournal(t)
 	j.Goal.CurrentPhase = PhaseClosure
-	j.Goal.Receipts[PhaseVerify] = Receipt{Phase: PhaseVerify, Summary: "one check passed", Evidence: testEvidence, RecordedAt: testNow}
+	j.Goal.Receipts[PhaseVerify] = Receipt{Phase: PhaseVerify, Summary: "one check passed", Evidence: newTestEvidence(), RecordedAt: testNow}
 	j.Goal.Acceptance[0].Status = ItemComplete
-	j.Goal.Acceptance[0].Evidence = testEvidence
+	j.Goal.Acceptance[0].Evidence = newTestEvidence()
 	if err := j.Advance(closureReceipt(), testNow); !IsCode(err, CodeInvalidGoal) {
 		t.Fatalf("error=%v", err)
 	}
@@ -48,11 +54,11 @@ func TestGoalCompletesOnlyWithChecklistAndAllReceipts(t *testing.T) {
 	t.Parallel()
 	j := newTestJournal(t)
 	for _, phase := range Phases[:len(Phases)-1] {
-		if err := j.Advance(Receipt{Phase: phase, Summary: "phase complete", Evidence: testEvidence}, testNow); err != nil {
+		if err := j.Advance(Receipt{Phase: phase, Summary: "phase complete", Evidence: newTestEvidence()}, testNow); err != nil {
 			t.Fatalf("%s: %v", phase, err)
 		}
 	}
-	if err := j.CompleteItem("release-ready", testEvidence, testNow); err != nil {
+	if err := j.CompleteItem("release-ready", newTestEvidence(), testNow); err != nil {
 		t.Fatal(err)
 	}
 	if err := j.Advance(closureReceipt(), testNow); err != nil {
@@ -61,7 +67,7 @@ func TestGoalCompletesOnlyWithChecklistAndAllReceipts(t *testing.T) {
 	if j.Goal.State != StateCompleted {
 		t.Fatalf("state=%s", j.Goal.State)
 	}
-	if err := j.CompleteItem("release-ready", testEvidence, testNow); !IsCode(err, CodeInvalidTransition) {
+	if err := j.CompleteItem("release-ready", newTestEvidence(), testNow); !IsCode(err, CodeInvalidTransition) {
 		t.Fatalf("completed goal mutation error=%v", err)
 	}
 }
@@ -69,7 +75,7 @@ func TestGoalCompletesOnlyWithChecklistAndAllReceipts(t *testing.T) {
 func TestAdvanceIsOrderedAndRequiresEvidence(t *testing.T) {
 	t.Parallel()
 	j := newTestJournal(t)
-	if err := j.Advance(Receipt{Phase: PhaseExecute, Summary: "implemented", Evidence: testEvidence}, testNow); !IsCode(err, CodeInvalidTransition) {
+	if err := j.Advance(Receipt{Phase: PhaseExecute, Summary: "implemented", Evidence: newTestEvidence()}, testNow); !IsCode(err, CodeInvalidTransition) {
 		t.Fatalf("out of order error=%v", err)
 	}
 	if err := j.Advance(Receipt{Phase: PhaseOrient, Summary: "inspected"}, testNow); !IsCode(err, CodeMissingReceipt) {
@@ -94,7 +100,7 @@ func TestLivingChecklistCanGrowAndRequiresUniqueIDs(t *testing.T) {
 func TestReceiptEvidenceIsAppendOnly(t *testing.T) {
 	t.Parallel()
 	j := newTestJournal(t)
-	if err := j.Advance(Receipt{Phase: PhaseOrient, Summary: "observed", Evidence: testEvidence}, testNow); err != nil {
+	if err := j.Advance(Receipt{Phase: PhaseOrient, Summary: "observed", Evidence: newTestEvidence()}, testNow); err != nil {
 		t.Fatal(err)
 	}
 	extra := Evidence{Type: EvidenceLink, Reference: "https://example.test/run", Result: "failed"}
@@ -106,6 +112,240 @@ func TestReceiptEvidenceIsAppendOnly(t *testing.T) {
 	}
 	if err := j.AddReceiptEvidence(PhaseOrient, extra, testNow); !IsCode(err, CodeInvalidGoal) {
 		t.Fatalf("duplicate error=%v", err)
+	}
+	conflict := extra
+	conflict.Result = "different"
+	if err := j.AddReceiptEvidence(PhaseOrient, conflict, testNow); !IsCode(err, CodeInvalidGoal) {
+		t.Fatalf("conflicting evidence error=%v", err)
+	}
+}
+
+func TestClosureRejectsInvalidNextWork(t *testing.T) {
+	t.Parallel()
+	tests := []struct {
+		name   string
+		mutate func(*ClosureDetails)
+	}{
+		{name: "missing", mutate: func(c *ClosureDetails) { c.NextWork = nil }},
+		{name: "empty", mutate: func(c *ClosureDetails) { c.NextWork = []Evidence{} }},
+		{name: "whitespace reference", mutate: func(c *ClosureDetails) { c.NextWork[0].Reference = " \t" }},
+		{name: "whitespace result", mutate: func(c *ClosureDetails) { c.NextWork[0].Result = " \n" }},
+		{name: "wrong type", mutate: func(c *ClosureDetails) { c.NextWork[0].Type = "provider" }},
+		{name: "oversized reference", mutate: func(c *ClosureDetails) { c.NextWork[0].Reference = strings.Repeat("x", MaxEvidenceFieldBytes+1) }},
+		{name: "oversized result", mutate: func(c *ClosureDetails) { c.NextWork[0].Result = strings.Repeat("x", MaxEvidenceFieldBytes+1) }},
+		{name: "duplicate", mutate: func(c *ClosureDetails) { c.NextWork = append(c.NextWork, c.NextWork[0]) }},
+		{name: "conflicting duplicate", mutate: func(c *ClosureDetails) {
+			duplicate := c.NextWork[0]
+			duplicate.Result = "different"
+			c.NextWork = append(c.NextWork, duplicate)
+		}},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			receipt := closureReceipt()
+			test.mutate(receipt.Closure)
+			if err := validateClosure(receipt); err == nil {
+				t.Fatal("invalid NextWork accepted")
+			}
+		})
+	}
+}
+
+func TestClosureJSONPresenceRoundTrip(t *testing.T) {
+	t.Parallel()
+	validEvidence := `[{"type":"file","reference":"ROADMAP.md","result":"canonical follow-up queue"}]`
+	tests := []struct {
+		name      string
+		remaining string
+		nextWork  string
+		valid     bool
+	}{
+		{name: "absent remaining", nextWork: `,"next_work":` + validEvidence},
+		{name: "null remaining", remaining: `,"remaining":null`, nextWork: `,"next_work":` + validEvidence},
+		{name: "explicit empty remaining", remaining: `,"remaining":[]`, nextWork: `,"next_work":` + validEvidence, valid: true},
+		{name: "nonempty remaining", remaining: `,"remaining":[{"kind":"risk","summary":"tracked"}]`, nextWork: `,"next_work":` + validEvidence, valid: true},
+		{name: "absent next work", remaining: `,"remaining":[]`},
+		{name: "null next work", remaining: `,"remaining":[]`, nextWork: `,"next_work":null`},
+		{name: "empty next work", remaining: `,"remaining":[]`, nextWork: `,"next_work":[]`},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			data := []byte(`{"achieved_outcome":"complete","cleanup":"clean"` + test.remaining + test.nextWork + `}`)
+			var closure ClosureDetails
+			if err := json.Unmarshal(data, &closure); err != nil {
+				t.Fatal(err)
+			}
+			receipt := Receipt{Phase: PhaseClosure, Summary: "complete", Evidence: newTestEvidence(), Closure: &closure}
+			err := validateClosure(receipt)
+			if test.valid != (err == nil) {
+				t.Fatalf("valid=%v error=%v closure=%#v", test.valid, err, closure)
+			}
+			if test.valid {
+				roundTrip, err := json.Marshal(closure)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if test.name == "explicit empty remaining" && !strings.Contains(string(roundTrip), `"remaining":[]`) {
+					t.Fatalf("explicit empty presence lost: %s", roundTrip)
+				}
+			}
+		})
+	}
+	for _, malformed := range []string{
+		`{"achieved_outcome":"complete","cleanup":"clean","remaining":{},"next_work":` + validEvidence + `}`,
+		`{"achieved_outcome":"complete","cleanup":"clean","remaining":[],"next_work":{}}`,
+	} {
+		var closure ClosureDetails
+		if err := json.Unmarshal([]byte(malformed), &closure); err == nil {
+			t.Fatalf("wrong container type accepted: %s", malformed)
+		}
+	}
+}
+
+func TestGoalRequiredMapPresenceRoundTrip(t *testing.T) {
+	t.Parallel()
+	j := newTestJournal(t)
+	if j.Goal.Receipts == nil || len(j.Goal.Receipts) != 0 {
+		t.Fatalf("initial receipts presence=%#v", j.Goal.Receipts)
+	}
+	data, err := json.Marshal(j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(data), `"receipts":{}`) {
+		t.Fatalf("empty receipts object lost: %s", data)
+	}
+	var raw map[string]any
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name   string
+		value  any
+		delete bool
+	}{
+		{name: "absent", delete: true},
+		{name: "null", value: nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			candidate := make(map[string]any, len(raw))
+			for key, value := range raw {
+				candidate[key] = value
+			}
+			goal := candidate["goal"].(map[string]any)
+			goalCopy := make(map[string]any, len(goal))
+			for key, value := range goal {
+				goalCopy[key] = value
+			}
+			candidate["goal"] = goalCopy
+			if test.delete {
+				delete(goalCopy, "receipts")
+			} else {
+				goalCopy["receipts"] = test.value
+			}
+			encoded, err := json.Marshal(candidate)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var restored Journal
+			if err := json.Unmarshal(encoded, &restored); err != nil {
+				t.Fatal(err)
+			}
+			if err := restored.Validate(); err == nil {
+				t.Fatal("missing receipts object accepted")
+			}
+		})
+	}
+}
+
+func TestGoalBuildersPreservePresenceAndDoNotAlias(t *testing.T) {
+	t.Parallel()
+	acceptance := []ChecklistItem{{ID: "release-ready", Acceptance: "all gates pass"}}
+	nonGoals := []string{"remote orchestration"}
+	j, err := New("release", "ship release", acceptance, nonGoals, testNow)
+	if err != nil {
+		t.Fatal(err)
+	}
+	acceptance[0].Acceptance = "mutated"
+	nonGoals[0] = "mutated"
+	if j.Goal.Acceptance[0].Acceptance != "all gates pass" || j.Goal.NonGoals[0] != "remote orchestration" || j.Goal.Receipts == nil {
+		t.Fatalf("New retained caller aliases: %#v", j.Goal)
+	}
+	for _, phase := range Phases[:len(Phases)-1] {
+		if err := j.Advance(Receipt{Phase: phase, Summary: "complete", Evidence: newTestEvidence()}, testNow); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := j.CompleteItem("release-ready", newTestEvidence(), testNow); err != nil {
+		t.Fatal(err)
+	}
+	receipt := closureReceipt()
+	if err := j.Advance(receipt, testNow); err != nil {
+		t.Fatal(err)
+	}
+	receipt.Evidence[0].Result = "mutated"
+	receipt.Closure.Remaining = nil
+	receipt.Closure.NextWork[0].Result = "mutated"
+	stored := j.Goal.Receipts[PhaseClosure]
+	if stored.Evidence[0].Result != "passed" || stored.Closure.Remaining == nil || stored.Closure.NextWork[0].Result != "canonical follow-up queue" {
+		t.Fatalf("Advance retained caller aliases: %#v", stored)
+	}
+}
+
+func TestGoalTestFixturesAreDeeplyIndependent(t *testing.T) {
+	t.Parallel()
+	first := closureReceipt()
+	second := closureReceipt()
+
+	if first.Closure == second.Closure {
+		t.Fatal("closure fixture pointers alias")
+	}
+	first.Evidence[0].Result = "first-only"
+	first.Closure.NextWork[0].Result = "first-only"
+	first.Closure.Remaining = append(first.Closure.Remaining, RemainingWork{Kind: "risk", Summary: "first-only"})
+	if second.Evidence[0].Result != "passed" || second.Closure.NextWork[0].Result != "canonical follow-up queue" {
+		t.Fatalf("fixture mutation escaped ownership: %#v", second)
+	}
+	if second.Closure.Remaining == nil || len(second.Closure.Remaining) != 0 {
+		t.Fatalf("explicit-empty Remaining presence changed: %#v", second.Closure.Remaining)
+	}
+
+	firstEvidence := newTestEvidence()
+	secondEvidence := newTestEvidence()
+	firstEvidence[0].Reference = "first-only"
+	if secondEvidence[0].Reference != "go test ./..." {
+		t.Fatalf("evidence fixtures alias: %#v", secondEvidence)
+	}
+}
+
+func TestGoalTestFixturesSupportConcurrentIndependentMutation(t *testing.T) {
+	t.Parallel()
+	const fixtureCount = 32
+	fixtures := make([]Receipt, fixtureCount)
+	for index := range fixtures {
+		fixtures[index] = closureReceipt()
+	}
+
+	var workers sync.WaitGroup
+	workers.Add(len(fixtures))
+	for index := range fixtures {
+		go func(index int) {
+			defer workers.Done()
+			fixtures[index].Evidence[0].Result = "mutated"
+			fixtures[index].Closure.NextWork[0].Result = "mutated"
+			fixtures[index].Closure.Remaining = append(fixtures[index].Closure.Remaining, RemainingWork{Kind: "risk", Summary: "mutated"})
+		}(index)
+	}
+	workers.Wait()
+
+	for index, fixture := range fixtures {
+		if fixture.Evidence[0].Result != "mutated" || fixture.Closure.NextWork[0].Result != "mutated" || len(fixture.Closure.Remaining) != 1 {
+			t.Fatalf("fixture %d lost its independent mutation: %#v", index, fixture)
+		}
+	}
+	canonical := closureReceipt()
+	if canonical.Evidence[0].Result != "passed" || canonical.Closure.NextWork[0].Result != "canonical follow-up queue" || canonical.Closure.Remaining == nil || len(canonical.Closure.Remaining) != 0 {
+		t.Fatalf("canonical fixture was mutated: %#v", canonical)
 	}
 }
 
@@ -120,7 +360,7 @@ func newTestJournal(t *testing.T) Journal {
 func advanceThrough(t *testing.T, j *Journal, last Phase) {
 	t.Helper()
 	for _, phase := range Phases {
-		if err := j.Advance(Receipt{Phase: phase, Summary: "complete", Evidence: testEvidence}, testNow); err != nil {
+		if err := j.Advance(Receipt{Phase: phase, Summary: "complete", Evidence: newTestEvidence()}, testNow); err != nil {
 			t.Fatal(err)
 		}
 		if phase == last {
@@ -130,5 +370,5 @@ func advanceThrough(t *testing.T, j *Journal, last Phase) {
 }
 
 func closureReceipt() Receipt {
-	return Receipt{Phase: PhaseClosure, Summary: "closure recorded", Evidence: testEvidence, Closure: &ClosureDetails{AchievedOutcome: "release ready", Cleanup: "temporary artifacts removed", Remaining: []RemainingWork{}, NextWork: []Evidence{{Type: EvidenceFile, Reference: "ROADMAP.md", Result: "canonical follow-up queue"}}}}
+	return Receipt{Phase: PhaseClosure, Summary: "closure recorded", Evidence: newTestEvidence(), Closure: &ClosureDetails{AchievedOutcome: "release ready", Cleanup: "temporary artifacts removed", Remaining: make([]RemainingWork, 0), NextWork: []Evidence{{Type: EvidenceFile, Reference: "ROADMAP.md", Result: "canonical follow-up queue"}}}}
 }

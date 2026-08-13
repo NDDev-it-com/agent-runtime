@@ -26,5 +26,7 @@ func TestLicenseMetadataParity(t *testing.T) {
 	if !strings.Contains(string(readme), "AGPL-3.0-only") {
 		t.Fatal("README SPDX identifier is not AGPL-3.0-only")
 	}
-	if reference, err:=os.ReadFile("../ci-workflows/LICENSE"); err==nil && !bytes.Equal(license,reference) { t.Fatal("LICENSE differs from canonical sibling public-module AGPL text") }
+	if reference, err := os.ReadFile("../ci-workflows/LICENSE"); err == nil && !bytes.Equal(license, reference) {
+		t.Fatal("LICENSE differs from canonical sibling public-module AGPL text")
+	}
 }

@@ -6,6 +6,23 @@ contract.
 
 ## [Unreleased]
 
+### Added
+
+- Provider-neutral immutable `v1alpha1` lifecycle envelopes for Task, Goal, and
+  Brain/Orchestrator/Dispatcher/Worker handoff observations.
+- Fail-closed typed redaction with nested structure, cycle, formatter, unsafe
+  value, Unicode/binary, depth, collection, string, attribute, stream, envelope,
+  replay, and file bounds.
+- Composable synchronous sinks, bounded memory and durable JSONL implementations,
+  delivery reports, retry/idempotency/replay semantics, and Task/Goal adapters.
+- Event JSON Schema, documentation, and deep race/fuzz/leak/restart/concurrency/
+  failure tests.
+
+### Changed
+
+- Task manifests expose additive `Prepare` validation so observers distinguish
+  validation failure from execution without changing Runner behavior.
+
 ## [0.1.0] - 2026-08-13
 
 ### Added

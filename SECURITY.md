@@ -34,3 +34,21 @@ caller's responsibility.
 Journal locking coordinates cooperating `agent-runtime` processes on macOS and
 Linux. It does not defend against a malicious local process that bypasses the
 lock or replaces directories concurrently.
+
+## Observability data
+
+Treat every lifecycle attribute as untrusted and potentially secret. Sensitivity
+labels are an additional control, not permission to persist credentials: unsafe
+names and values are denied at every sensitivity. Events intentionally exclude
+Task output, instruction context, command arguments, environment values, Goal
+prose, provider payloads, raw errors, and raw sink failures.
+
+Redaction occurs before an immutable envelope reaches a sink. Nested structures
+are re-evaluated key by key, bounded, copied, and JSON encoded; custom errors and
+stringers are never invoked. Redaction metadata contains only typed reasons and
+aggregate counts, not paths, hashes, lengths, or removed values.
+
+JSONL paths are trusted caller configuration. Existing files must be regular,
+owner-only, supported-version canonical JSONL. Symlinks, partial records,
+duplicates, unsupported versions, oversize files, and corruption fail closed.
+The sink does not encrypt data or protect against a compromised host.

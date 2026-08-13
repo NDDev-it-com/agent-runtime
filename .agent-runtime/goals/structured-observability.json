@@ -1,0 +1,191 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 18,
+  "goal": {
+    "id": "structured-observability",
+    "intent": "Deliver production-grade provider-neutral lifecycle events and redaction-aware sinks without weakening authoritative Task and Goal contracts",
+    "acceptance": [
+      {
+        "id": "canonical-issues",
+        "acceptance": "Product issue #3 defines implementation acceptance and PR backlink; governance issue #4 remains separate",
+        "status": "pending"
+      },
+      {
+        "id": "event-contract",
+        "acceptance": "Immutable v1alpha1 envelopes cover Task, Goal and handoff lifecycles with bounded canonical identity, causality, ordering, actor/runtime, attempts, outcomes and typed evidence",
+        "status": "pending"
+      },
+      {
+        "id": "redaction",
+        "acceptance": "Deterministic typed redaction occurs before every sink boundary, denies unsafe content by default, bounds structures and exposes safe decisions",
+        "status": "pending"
+      },
+      {
+        "id": "sinks",
+        "acceptance": "Composable sink contract includes durable JSONL and memory sinks with explicit failure, backpressure, retry, idempotency, flush and close semantics",
+        "status": "pending"
+      },
+      {
+        "id": "compatibility",
+        "acceptance": "Existing Task/Goal APIs, schemas, journals and Go 1.24 compatibility remain valid and rollback needs no journal migration",
+        "status": "pending"
+      },
+      {
+        "id": "deep-tests",
+        "acceptance": "Lifecycle, schema, canonical serialization, concurrency, retry, replay, partial write, failure, redaction leaks, Unicode/binary/oversize, race/fuzz and cross-platform behavior are verified",
+        "status": "pending"
+      },
+      {
+        "id": "publication",
+        "acceptance": "Signed feature PR linked to issue #3 merges only after full green checks; exact merged main is verified and synchronized cleanly",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Provider SDKs, exporters, dashboards, tracing backends, network sinks or OpenObserve/OpenTelemetry coupling",
+      "Replace or duplicate Task/Goal authoritative state machines",
+      "Persist raw prompts, commands, environment values, provider payloads or live secrets",
+      "Change repository branch-rule governance in this code Goal"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Asked what may have been forgotten: audited mutable package globals, every testEvidence and closureReceipt call site, t.Parallel consumers, nested slices/pointers, nil-versus-empty Remaining semantics, schema/container tests, replay/sink fixtures, TODOs, terminology and governance separation. No second shared mutable fixture or semantic vocabulary fork remains; issue #4 stays open.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "rg fixture/global/t.Parallel/TODO/provider audit; git diff --check",
+            "result": "Only immutable time values remain global in tests; all mutable evidence/closure fixtures are freshly constructed; no residual TODO or formatting drift."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:11:32.743036Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Implemented observability envelope/schema, deterministic redaction, emitter/delivery reports, bounded memory and durable JSONL sinks, Task/Goal/handoff lifecycle adapters, Task Prepare API, replay/restart support, typed errors/blocking evidence, docs/examples and deep tests. Existing Runner and Goal Store remain authoritative and unchanged in default behavior.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "go test -race ./...; go vet ./...",
+            "result": "All packages compile and pass race tests/vet after implementation; first compile failure in Policy.Redact duplicate branch was preserved and repaired before this receipt."
+          },
+          {
+            "type": "command",
+            "reference": "go test ./observability (Attempt 1)",
+            "result": "First product failure: compiler reported Policy.Redact duplicate branch returned four values for a three-value signature; repaired locally, subsequent package and race suites passed."
+          },
+          {
+            "type": "test",
+            "reference": "go test ./...",
+            "result": "Attempt 2 exposed invalid adapter draft classification after identity hardening; systemic audit confirmed authoritative Goal persistence remained correct; adapter now returns typed corrupt_data delivery evidence and the full suite passes."
+          },
+          {
+            "type": "test",
+            "reference": "focused recovery tests and go test ./...",
+            "result": "One canonical acceptedTaskDraft delegates to production TaskResultDraft with Accepted=true; validator, memory sink, JSONL replay negatives fail closed; focused and full suites pass."
+          },
+          {
+            "type": "test",
+            "reference": "gofmt -d repository Go files",
+            "result": "Recovery-cycle Attempt 1 found pre-existing non-gofmt license_test.go; chained verification stopped before subsequent commands; evidence preserved on issue #3 and repaired mechanically without semantic change."
+          },
+          {
+            "type": "test",
+            "reference": "TestEveryLifecycleKindHasValidSubjectOutcomeAndPayload recovery Attempt 2",
+            "result": "Real Goal lifecycle derivation replaced a false-green and exposed missing explicit NextWork in the closure fixture; systemic Goal/Go/OWASP audit completed before fixture repair; production semantics unchanged."
+          },
+          {
+            "type": "test",
+            "reference": "recovery-cycle 2 focused lifecycle compilation Attempt 1",
+            "result": "Canonical NextWork helper refactor initially omitted a local fixture binding in TestGoalCompletionCarriesTypedDebtWithoutSummary; exact compiler evidence preserved on issue #3; repair is binding-only."
+          },
+          {
+            "type": "test",
+            "reference": "recovery-cycle 2 Attempt 2 focused Goal/observability tests",
+            "result": "Explicit local fixture binding reconciled; allocated copy preserves explicit empty Remaining; canonical non-empty NextWork helper and fail-closed Goal/envelope/sink/replay negatives all pass without weakening production semantics."
+          },
+          {
+            "type": "test",
+            "reference": "recovery-cycle 3 Attempt 1 focused Goal/root/observability gate",
+            "result": "Canonical attributes derive from production redaction and remain immutable after fixture mutation; required payload/redactions and negative container checks pass."
+          }
+        ],
+        "recorded_at": "2026-08-13T02:32:41.905359Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Canonical product issue #3 and separate governance issue #4 established. Designed an additive observability package: immutable v1alpha1 content-addressed envelopes; bounded provider-neutral Task/Goal/handoff vocabulary; per-subject sequence with correlation/causation; fixed actor/runtime/attempt/outcome/error/block/debt/evidence types; fail-closed reflection redaction before Sink; synchronous bounded idempotent sinks; JSONL replay checkpoints; opt-in Runner/Store wrappers. Authoritative state and schemas remain unchanged; rollback removes adapters without journal migration. Risks and non-goals match issue #3.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/3",
+            "result": "Acceptance, invariants, threat model, compatibility, rollback, non-goals and required evidence are canonicalized; issue #4 separately owns branch governance."
+          }
+        ],
+        "recorded_at": "2026-08-13T02:32:41.882456Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Reread repository/user instructions; inspected clean main 2263401, architecture/API/tests/schemas/ROADMAP/security, terminal prior journals, dependency-free Go 1.24 module, merged PRs and live issues. Existing Task/Goal state and durability guarantees are authoritative. No lifecycle event, emitter, redaction policy or sink exists. Smallest coherent missing boundary is an independent observability package with derived adapters and opt-in wiring, never a duplicate state machine.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "git status/log; repository source/docs/schema/journal audit; gh issue/pr list",
+            "result": "Clean main at 2263401; issues initially empty and only PRs #1/#2 merged; structured lifecycle events/redaction sinks are the explicit roadmap gap."
+          },
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/3#issuecomment-5275299317",
+            "result": "Recovery-cycle Attempt 1 lineage preserves exact base 2263401296211c1a21336eded37ed2691630a6d1, uncommitted feature diff, prior Attempts 1/2/3, and the two exact inherited failures."
+          },
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/3#issuecomment-5275436828",
+            "result": "Recovery-cycle 3 lineage preserves exact base, WIP, Goal rev12 and terminal comment 5275424873; fixture/presence audit identified the assertion-only drift."
+          }
+        ],
+        "recorded_at": "2026-08-13T02:13:28.485559Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "Reconciled issue #3 acceptance, lifecycle vocabulary, Goal and Task authority, schemas, docs, examples, replay and sink contracts. Recovery-cycle 3 Attempt2 removed the sole mutable package-global evidence fixture via fresh per-call ownership; production Advance cloning and validation remain unchanged. Issue #4 remains separate.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/3#issuecomment-5275463082",
+            "result": "Attempt2 pre-mutation fixture audit and race root cause preserved; exact base and prior attempt lineage remain immutable."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:10:54.177587Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "Independent review covered architecture boundaries, correctness, race safety, redaction trust boundaries, sink failure behavior, public API and naming, schema/docs parity, compatibility, operability and maintainability. Attempt2 found no mutable fixture globals beyond testEvidence; fresh fixtures now own every mutable slice and pointer. No production behavior changed.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "go test -race ./goal -count=10; go test -race ./... -count=3",
+            "result": "Fresh fixture ownership, concurrent mutation, authoritative Goal behavior and whole-repository race safety pass repeatedly."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:11:21.078319Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "All local applicable product and release gates pass: focused race reproducer repeated 20 times, Goal package race repeated 10 times, full tests, full race repeated 3 times, three fuzz targets, vet, gofmt/diff checks, schema/docs/redaction/lifecycle/replay focused coverage, CI contract and govulncheck v1.6.0. staticcheck is not installed and is not a repository-native CI gate; remote exact-head CI/CodeQL remains required before closure.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local verification 2026-08-13",
+            "result": "go test ./...; go test -race ./... -count=3; fuzz targets; go vet ./...; gofmt; schema/docs/security focused tests; CI contract; govulncheck v1.6.0 all green."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:11:32.861424Z"
+      }
+    },
+    "created_at": "2026-08-13T02:13:28.471584Z",
+    "updated_at": "2026-08-13T03:11:32.861424Z"
+  }
+}

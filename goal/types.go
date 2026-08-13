@@ -13,6 +13,11 @@ import (
 
 const SchemaVersion = "v1alpha1"
 
+const (
+	MaxEvidenceRecords    = 64
+	MaxEvidenceFieldBytes = 2048
+)
+
 type State string
 
 const (
@@ -142,11 +147,13 @@ type Journal struct {
 var idPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
 
 func New(id, intent string, acceptance []ChecklistItem, nonGoals []string, now time.Time) (Journal, error) {
+	items := make([]ChecklistItem, len(acceptance))
 	for i := range acceptance {
-		acceptance[i].Status = ItemPending
-		acceptance[i].Evidence = nil
+		items[i] = acceptance[i]
+		items[i].Status = ItemPending
+		items[i].Evidence = nil
 	}
-	j := Journal{SchemaVersion: SchemaVersion, Revision: 1, Goal: Goal{ID: id, Intent: strings.TrimSpace(intent), Acceptance: acceptance, NonGoals: nonGoals, State: StateActive, CurrentPhase: PhaseOrient, Receipts: map[Phase]Receipt{}, CreatedAt: now.UTC(), UpdatedAt: now.UTC()}}
+	j := Journal{SchemaVersion: SchemaVersion, Revision: 1, Goal: Goal{ID: id, Intent: strings.TrimSpace(intent), Acceptance: items, NonGoals: cloneStrings(nonGoals), State: StateActive, CurrentPhase: PhaseOrient, Receipts: map[Phase]Receipt{}, CreatedAt: now.UTC(), UpdatedAt: now.UTC()}}
 	if err := j.Validate(); err != nil {
 		return Journal{}, err
 	}
@@ -288,7 +295,12 @@ func (j *Journal) AddReceiptEvidence(phase Phase, evidence Evidence, now time.Ti
 			return invalid("duplicate receipt evidence")
 		}
 	}
-	receipt.Evidence = append(receipt.Evidence, evidence)
+	combined := cloneEvidence(receipt.Evidence)
+	combined = append(combined, evidence)
+	if err := validateEvidence(combined); err != nil {
+		return err
+	}
+	receipt.Evidence = combined
 	j.Goal.Receipts[phase] = receipt
 	j.touch(now)
 	return nil
@@ -316,6 +328,7 @@ func (j *Journal) Advance(receipt Receipt, now time.Time) error {
 	if _, exists := j.Goal.Receipts[receipt.Phase]; exists {
 		return transition("phase already has a receipt")
 	}
+	receipt = cloneReceipt(receipt)
 	receipt.RecordedAt = now.UTC()
 	j.Goal.Receipts[receipt.Phase] = receipt
 	index := phaseIndex(receipt.Phase)
@@ -359,13 +372,61 @@ func validateEvidence(items []Evidence) error {
 	if len(items) == 0 {
 		return &Error{Code: CodeMissingReceipt, Message: "at least one evidence record is required"}
 	}
+	if len(items) > MaxEvidenceRecords {
+		return &Error{Code: CodeInvalidGoal, Message: "evidence record limit exceeded"}
+	}
+	seen := make(map[string]bool, len(items))
 	for _, item := range items {
 		validType := item.Type == EvidenceCommand || item.Type == EvidenceFile || item.Type == EvidenceLink || item.Type == EvidenceCommit || item.Type == EvidenceTest || item.Type == EvidenceIssue
-		if !validType || strings.TrimSpace(item.Reference) == "" || strings.TrimSpace(item.Result) == "" {
+		reference, result := strings.TrimSpace(item.Reference), strings.TrimSpace(item.Result)
+		if !validType || reference == "" || result == "" || len(item.Reference) > MaxEvidenceFieldBytes || len(item.Result) > MaxEvidenceFieldBytes {
 			return &Error{Code: CodeMissingReceipt, Message: "evidence type, reference, and result are required"}
 		}
+		key := string(item.Type) + "\x00" + reference
+		if seen[key] {
+			return &Error{Code: CodeInvalidGoal, Message: "duplicate or conflicting evidence identity"}
+		}
+		seen[key] = true
 	}
 	return nil
+}
+
+func cloneStrings(items []string) []string {
+	if items == nil {
+		return nil
+	}
+	out := make([]string, len(items))
+	copy(out, items)
+	return out
+}
+
+func cloneEvidence(items []Evidence) []Evidence {
+	if items == nil {
+		return nil
+	}
+	out := make([]Evidence, len(items))
+	copy(out, items)
+	return out
+}
+
+func cloneRemaining(items []RemainingWork) []RemainingWork {
+	if items == nil {
+		return nil
+	}
+	out := make([]RemainingWork, len(items))
+	copy(out, items)
+	return out
+}
+
+func cloneReceipt(receipt Receipt) Receipt {
+	receipt.Evidence = cloneEvidence(receipt.Evidence)
+	if receipt.Closure != nil {
+		closure := *receipt.Closure
+		closure.Remaining = cloneRemaining(receipt.Closure.Remaining)
+		closure.NextWork = cloneEvidence(receipt.Closure.NextWork)
+		receipt.Closure = &closure
+	}
+	return receipt
 }
 func validateClosure(receipt Receipt) error {
 	if receipt.Phase != PhaseClosure {

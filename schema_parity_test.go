@@ -42,6 +42,16 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	if !reflect.DeepEqual(gotEvidence, wantEvidence) {
 		t.Fatalf("evidence schema drift: got %v want %v", gotEvidence, wantEvidence)
 	}
+	evidenceProperties := defs["evidence"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []string{"reference", "result"} {
+		if evidenceProperties[field].(map[string]any)["maxLength"] != float64(goalpkg.MaxEvidenceFieldBytes) {
+			t.Fatalf("evidence %s bound drift", field)
+		}
+	}
+	nextWork := defs["closure"].(map[string]any)["properties"].(map[string]any)["next_work"].(map[string]any)
+	if nextWork["minItems"] != float64(1) || nextWork["maxItems"] != float64(goalpkg.MaxEvidenceRecords) || nextWork["uniqueItems"] != true {
+		t.Fatalf("NextWork schema bounds drift: %#v", nextWork)
+	}
 }
 
 func TestGoSourcesCarrySPDXHeader(t *testing.T) {
