@@ -1,0 +1,152 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 5,
+  "goal": {
+    "id": "first-v0-release",
+    "intent": "Publish the first verifiable v0.1.0 Go module/source release from an annotated signed exact-main tag",
+    "acceptance": [
+      {
+        "id": "contract",
+        "acceptance": "One versioned fail-closed source of truth defines release identity, assets, bounds, workflow and action pins",
+        "status": "pending"
+      },
+      {
+        "id": "deterministic",
+        "acceptance": "Exact-commit source archive, SPDX SBOM, notes, manifest and checksums are deterministic, closed and deeply tested",
+        "status": "pending"
+      },
+      {
+        "id": "security",
+        "acceptance": "Tag-only minimal-permission publication verifies signed exact-main identity and keylessly attests every material asset",
+        "status": "pending"
+      },
+      {
+        "id": "documentation",
+        "acceptance": "Changelog, release docs, README, package and CLI version vocabulary match the honest v0.1.0 Go module/source boundary",
+        "status": "pending"
+      },
+      {
+        "id": "verification",
+        "acceptance": "Focused/full/race/fuzz/vet/format/schema/security and exact-head CI/CodeQL/post-main evidence are green",
+        "status": "pending"
+      },
+      {
+        "id": "publication",
+        "acceptance": "Immutable GitHub release, asset digests, SBOM, manifest, attestations and Go module discovery are verified without ambiguity",
+        "status": "pending"
+      },
+      {
+        "id": "closure",
+        "acceptance": "Issue #9 closes only after terminal release evidence and clean synchronized main",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Prebuilt binaries, platform matrices, containers, installers or registries",
+      "Observability/runtime semantic or repository governance check changes",
+      "Organization, credentials, secrets, environments, siblings, GDS or unrelated repositories"
+    ],
+    "state": "active",
+    "current_phase": "execute",
+    "receipts": {
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Implement a local v1alpha1 release contract and Go builder/validator so Go v-tags, exact-main signed tag checks and repository-specific package semantics stay canonical. PR/main dry-run remains inside existing required CI checks; one tag-only publication workflow owns minimal write/OIDC permissions. Immutable release enablement and the signed tag remain post-merge gates.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9",
+            "result": "Executable acceptance defines five-asset closure, deterministic metadata, SPDX/manifest bindings, negative tests, publication and terminal verification."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:49:29.568819Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Accepted clean exact main 3b4087bc; audited module/public packages/reference CLI, Go 1.24 baseline and Go 1.25 scanner lane, AGPL/docs/changelog/security, absent tags/releases/consumers, workflow permissions/governance, inherited immutable tag rules, disabled immutable releases, sibling supply-chain conventions and current primary guidance. Chose honest v0.1.0 Go module/source-only release with exactly five assets and no platform binaries.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9",
+            "result": "Canonical roadmap/release issue records done, remaining, exact acceptance, threat model, rollback, non-goals and omissions before tree implementation."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:49:29.409182Z"
+      },
+      "recovery_cycle_verification_orient": {
+        "phase": "orient",
+        "summary": "New recovery-cycle Attempt1 preserved all earlier receipts and audited repository workflows, scripts, Make targets, docs and Goal journals. No owned module-tidy gate existed; the prior terminal command incorrectly compared intentional feature WIP with HEAD instead of evaluating go mod tidy -diff.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9#issuecomment-5280458711",
+            "result": "API-byte-equal lineage records the side-effect-free verifier design and exact preserved base/diff state."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:38:25Z"
+      },
+      "recovery_cycle_verification_execute": {
+        "phase": "execute",
+        "summary": "Implemented one side-effect-free module verifier and thin command. CI and release documentation delegate to it; tests prove exact invocation, local toolchain enforcement, output/error preservation, worktree independence, real tidy drift rejection and module-file immutability.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/modverify/verify.go; cmd/check-module-tidy/main.go; internal/modverify/verify_test.go",
+            "result": "One typed subprocess boundary owns GOTOOLCHAIN=local go mod tidy -diff; no Git comparison or mutating tidy path exists."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:39:21Z"
+      },
+      "recovery_cycle_verification_reconcile": {
+        "phase": "reconcile",
+        "summary": "Re-audited repository workflows, docs, journals, scripts and Make targets after implementation. CI and documentation use the canonical command exactly once; the immutable historical receipt is the only remaining record of the rejected HEAD comparison.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestRepositoryUsesCanonicalModuleVerifier",
+            "result": "Deterministic policy test rejects operational direct tidy or git-diff bypasses while requiring canonical CI/docs references."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:39:21Z"
+      },
+      "recovery_cycle_verification_self_review": {
+        "phase": "self_review",
+        "summary": "Reviewed the entire accumulated release WIP for architecture, correctness, security, public vocabulary, failure behavior, schemas, permissions and maintainability. This cycle changes only verification infrastructure and preserves release transaction, descriptor ownership, validators, assets and governance semantics.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "full diff/status plus TODO, bypass and unsafe-path audit",
+            "result": "No alternate verification path, semantic fork, release side effect or weakened product boundary found."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:39:21Z"
+      },
+      "recovery_cycle_verification_omission": {
+        "phase": "completeness_omission_audit",
+        "summary": "Asked what may have been forgotten: checked real tidy drift, clean modules amid expected and unrelated WIP, stdout/stderr separation, root error identity, nil execution boundaries, module-file immutability, CI/docs parity, build tags, fuzz targets, SPDX, schemas, action pins, dependency closure, dirty paths and tag/release absence.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "repository-wide rg, diff inventory, native gates and workflow/contract validation",
+            "result": "No omitted operational module command or verification bypass remains; cross-target local probe was blocked before execution by command-policy infrastructure and Linux remains an exact-head CI requirement."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:39:21Z"
+      },
+      "recovery_cycle_verification_verify": {
+        "phase": "verify",
+        "summary": "Gofmt, compile-only, focused verifier, canonical module check, releasecontract, full tests, race, vet, all fuzz targets, CI/governance/release/schema/license/docs checks, CLI build, diff check and pinned govulncheck are green. Standalone staticcheck is unavailable and no unpinned substitute was used.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "local Attempt1 gate transcript on 2026-08-13",
+            "result": "Every executed product, test, schema, security and provenance gate exited zero; no repair or rerun followed a failure."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:39:21Z"
+      }
+    },
+    "created_at": "2026-08-13T03:49:29.267966Z",
+    "updated_at": "2026-08-13T12:39:21Z"
+  }
+}

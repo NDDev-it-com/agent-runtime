@@ -29,8 +29,20 @@ jobs:
       - run: go test -race ./...
       - run: go vet ./...
       - run: go build ./cmd/agent-runtime
+      - name: Verify module metadata is tidy without mutation
+        run: go run ./cmd/check-module-tidy
       - run: go run ./cmd/check-ci-contract
       - run: go run ./cmd/check-governance-contract
+      - name: Reproduce release bundle without publication
+        run: |
+          set -euo pipefail
+          parent="$(mktemp -d)"
+          first="$parent/first"
+          second="$parent/second"
+          trap 'rm -rf -- "$parent"' EXIT
+          go run ./cmd/check-release-contract --build --commit HEAD --out "$first"
+          go run ./cmd/check-release-contract --build --commit HEAD --out "$second"
+          diff -rq "$first" "$second"
 
   govulncheck:
     runs-on: ubuntu-latest
@@ -50,4 +62,5 @@ jobs:
             go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 -version
           } >>"${GITHUB_STEP_SUMMARY}"
       - run: go run ./cmd/check-ci-contract
+      - run: go run ./cmd/check-release-contract
       - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...

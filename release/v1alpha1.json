@@ -1,0 +1,34 @@
+{
+  "schema_version": "v1alpha1",
+  "version": "v0.1.0",
+  "module_path": "github.com/NDDev-it-com/agent-runtime",
+  "go_compatibility": "1.24",
+  "license": "AGPL-3.0-only",
+  "dependencies": [
+    {"module_path": "golang.org/x/mod", "version": "v0.27.0", "license": "BSD-3-Clause"},
+    {"module_path": "golang.org/x/sys", "version": "v0.40.0", "license": "BSD-3-Clause"}
+  ],
+  "source_commit": "HEAD",
+  "archive_prefix": "agent-runtime-v0.1.0/",
+  "workflow": ".github/workflows/release.yml",
+  "allowed_signers": ".github/release-allowed-signers",
+  "assets": {
+    "archive": "agent-runtime-v0.1.0-source.tar.gz",
+    "sbom": "agent-runtime-v0.1.0.spdx.json",
+    "notes": "release-notes-v0.1.0.md",
+    "manifest": "release-manifest-v0.1.0.json",
+    "checksums": "SHA256SUMS"
+  },
+  "limits": {
+    "max_files": 4096,
+    "max_file_bytes": 16777216,
+    "max_total_bytes": 67108864,
+    "max_path_bytes": 512
+  },
+  "actions": {
+    "checkout": "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1",
+    "setup_go": "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
+    "attest_provenance": "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373",
+    "attest_sbom": "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d"
+  }
+}

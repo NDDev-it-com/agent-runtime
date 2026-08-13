@@ -28,7 +28,7 @@ protocol, scheduler, or operating-system sandbox.
 Requires Go 1.24 or newer.
 
 ```sh
-go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@latest
+go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.0
 agent-runtime task validate --manifest examples/basic/agent.json --workspace examples/basic
 agent-runtime task run --manifest examples/basic/agent.json --workspace examples/basic
 ```
@@ -72,6 +72,21 @@ output. Maximums are 24 hours, 16 MiB of context, and 64 MiB of output.
 
 The canonical distributable schema is
 [`schemas/task-manifest-v1alpha1.schema.json`](schemas/task-manifest-v1alpha1.schema.json).
+
+## Releases
+
+The project is released as a Go module/source product. It does not publish
+prebuilt platform binaries. Install the reference CLI with:
+
+```sh
+go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.0
+```
+
+Each tag-only release contains one deterministic tracked-source archive, an
+SPDX 2.3 JSON SBOM, canonical release notes, a release manifest, and
+`SHA256SUMS`. The annotated signed tag identifies the exact `main` commit;
+GitHub OIDC/Sigstore attestations cover every material asset. See
+[`docs/releasing.md`](docs/releasing.md) for verification and rollback rules.
 
 ## Goal contract
 

@@ -11,6 +11,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 
 	agentruntime "github.com/NDDev-it-com/agent-runtime"
 	goalpkg "github.com/NDDev-it-com/agent-runtime/goal"
@@ -38,7 +39,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	case "task":
 		return taskCommand(args[1:], stdout, stderr)
 	case "version":
-		fmt.Fprintln(stdout, version)
+		fmt.Fprintln(stdout, displayVersion())
 		return nil
 	case "goal":
 		return goalCommand(args[1:], stdout, stderr)
@@ -47,6 +48,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 	default:
 		return fmt.Errorf("unknown command %q", args[0])
 	}
+}
+
+func displayVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok && info.Main.Version != "" && info.Main.Version != "(devel)" {
+		return info.Main.Version
+	}
+	return version
 }
 
 func usage(w io.Writer) error {

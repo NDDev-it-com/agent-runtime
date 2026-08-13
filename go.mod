@@ -1,4 +1,8 @@
 module github.com/NDDev-it-com/agent-runtime
 
-go 1.24
+go 1.24.0
 
+require (
+	golang.org/x/mod v0.27.0
+	golang.org/x/sys v0.40.0
+)
