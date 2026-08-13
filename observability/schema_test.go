@@ -57,6 +57,54 @@ func TestLifecycleSchemaVocabularyParity(t *testing.T) {
 	if !reflect.DeepEqual(gotErrors, wantErrors) {
 		t.Fatalf("errors got=%v want=%v", gotErrors, wantErrors)
 	}
+	gotOutcomes := stringsFromSchema(properties["outcome"].(map[string]any)["enum"])
+	wantOutcomes := []string{string(OutcomeObserved), string(OutcomeStarted), string(OutcomeSucceeded), string(OutcomeFailed), string(OutcomeBlocked), string(OutcomeCancelled)}
+	sort.Strings(gotOutcomes)
+	sort.Strings(wantOutcomes)
+	if !reflect.DeepEqual(gotOutcomes, wantOutcomes) {
+		t.Fatalf("outcomes got=%v want=%v", gotOutcomes, wantOutcomes)
+	}
+	for _, outcome := range wantOutcomes {
+		if !validOutcome(Outcome(outcome)) {
+			t.Fatalf("schema publishes outcome %q the validator rejects", outcome)
+		}
+	}
+	gotAttempts := stringsFromSchema(properties["attempt"].(map[string]any)["enum"])
+	wantAttempts := []string{string(AttemptInitial), string(AttemptRetry), string(AttemptRecovery), string(AttemptReplay)}
+	sort.Strings(gotAttempts)
+	sort.Strings(wantAttempts)
+	if !reflect.DeepEqual(gotAttempts, wantAttempts) {
+		t.Fatalf("attempts got=%v want=%v", gotAttempts, wantAttempts)
+	}
+	for _, attempt := range wantAttempts {
+		if !validAttempt(Attempt(attempt)) {
+			t.Fatalf("schema publishes attempt %q the validator rejects", attempt)
+		}
+	}
+	gotSubjects := stringsFromSchema(defs["subject"].(map[string]any)["properties"].(map[string]any)["kind"].(map[string]any)["enum"])
+	wantSubjects := []string{string(SubjectTask), string(SubjectGoal), string(SubjectHandoff)}
+	sort.Strings(gotSubjects)
+	sort.Strings(wantSubjects)
+	if !reflect.DeepEqual(gotSubjects, wantSubjects) {
+		t.Fatalf("subject kinds got=%v want=%v", gotSubjects, wantSubjects)
+	}
+	gotActors := stringsFromSchema(defs["actor"].(map[string]any)["properties"].(map[string]any)["kind"].(map[string]any)["enum"])
+	wantActors := []string{string(ActorBrain), string(ActorOrchestrator), string(ActorDispatcher), string(ActorWorker), string(ActorRuntime)}
+	sort.Strings(gotActors)
+	sort.Strings(wantActors)
+	if !reflect.DeepEqual(gotActors, wantActors) {
+		t.Fatalf("actor kinds got=%v want=%v", gotActors, wantActors)
+	}
+	for _, actor := range wantActors {
+		if !validActor(Actor{Kind: ActorKind(actor), ID: "role"}) {
+			t.Fatalf("schema publishes actor kind %q the validator rejects", actor)
+		}
+	}
+	gotHandoffRoles := stringsFromSchema(defs["handoff"].(map[string]any)["properties"].(map[string]any)["from"].(map[string]any)["enum"])
+	sort.Strings(gotHandoffRoles)
+	if !reflect.DeepEqual(gotHandoffRoles, wantActors) {
+		t.Fatalf("handoff roles got=%v want=%v", gotHandoffRoles, wantActors)
+	}
 	gotBlocks := stringsFromSchema(defs["blocking"].(map[string]any)["properties"].(map[string]any)["code"].(map[string]any)["enum"])
 	wantBlocks := []string{string(BlockApprovalRequired), string(BlockDependencyUnavailable), string(BlockEvidenceMissing), string(BlockAuthorityRequired), string(BlockExternalState)}
 	sort.Strings(gotBlocks)

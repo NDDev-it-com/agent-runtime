@@ -7,9 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	goalpkg "github.com/NDDev-it-com/agent-runtime/goal"
 	releasepkg "github.com/NDDev-it-com/agent-runtime/internal/releasecontract"
@@ -86,6 +88,31 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 			t.Fatalf("evidence %s bound drift", field)
 		}
 	}
+	// The Goal schema and the Go contract must agree on the identifier grammar and
+	// on receipts being keyed by the phase enumeration. The schema left both open,
+	// so a journal the runtime rejects still validated against the distributable
+	// contract.
+	identifier, ok := defs["identifier"].(map[string]any)["pattern"].(string)
+	if !ok {
+		t.Fatal("Goal schema does not define a shared identifier grammar")
+	}
+	if identifier != idPattern.String() {
+		t.Fatalf("identifier grammar drift: schema %q, runtime %q", identifier, idPattern.String())
+	}
+	goalProperties := goal["properties"].(map[string]any)["goal"].(map[string]any)["properties"].(map[string]any)
+	for _, field := range []string{"id"} {
+		if ref := goalProperties[field].(map[string]any)["$ref"]; ref != "#/$defs/identifier" {
+			t.Fatalf("goal %s does not use the shared identifier grammar: %v", field, ref)
+		}
+	}
+	if ref := defs["checklistItem"].(map[string]any)["properties"].(map[string]any)["id"].(map[string]any)["$ref"]; ref != "#/$defs/identifier" {
+		t.Fatalf("checklist item id does not use the shared identifier grammar: %v", ref)
+	}
+	if ref := goalProperties["receipts"].(map[string]any)["propertyNames"].(map[string]any)["$ref"]; ref != "#/$defs/phase" {
+		t.Fatalf("receipts are not keyed by the phase enumeration: %v", ref)
+	}
+	assertIdentifierParity(t, identifier)
+
 	nextWork := defs["closure"].(map[string]any)["properties"].(map[string]any)["next_work"].(map[string]any)
 	if nextWork["minItems"] != float64(1) || nextWork["maxItems"] != float64(goalpkg.MaxEvidenceRecords) || nextWork["uniqueItems"] != true {
 		t.Fatalf("NextWork schema bounds drift: %#v", nextWork)
@@ -127,6 +154,31 @@ func TestGoSourcesCarrySPDXHeader(t *testing.T) {
 		}
 		if !strings.HasPrefix(string(data), "// SPDX-License-Identifier: AGPL-3.0-only\n") {
 			t.Errorf("missing SPDX header: %s", path)
+		}
+	}
+}
+
+// assertIdentifierParity checks that the published grammar and the Goal state
+// machine accept exactly the same identifiers.
+func assertIdentifierParity(t *testing.T, pattern string) {
+	t.Helper()
+	grammar := regexp.MustCompile(pattern)
+	cases := map[string]bool{
+		"release": true, "release-ready": true, "a": true, "a.b_c-d": true, "curl": true, "run-command": true,
+		"": false, "Release": false, "1release": false, "release--ready": false, "release-": false, ".release": false,
+	}
+	now := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
+	for id, want := range cases {
+		if got := grammar.MatchString(id); got != want {
+			t.Errorf("schema grammar accepts %q = %v, want %v", id, got, want)
+		}
+		_, err := goalpkg.New(id, "intent", []goalpkg.ChecklistItem{{ID: "item", Acceptance: "criterion"}}, nil, now)
+		if got := err == nil; got != want {
+			t.Errorf("Goal accepts id %q = %v, want %v (%v)", id, got, want, err)
+		}
+		_, err = goalpkg.New("release", "intent", []goalpkg.ChecklistItem{{ID: id, Acceptance: "criterion"}}, nil, now)
+		if got := err == nil; got != want {
+			t.Errorf("Goal accepts checklist id %q = %v, want %v (%v)", id, got, want, err)
 		}
 	}
 }

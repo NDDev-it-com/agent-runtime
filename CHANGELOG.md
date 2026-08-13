@@ -6,6 +6,26 @@ contract.
 
 ## [Unreleased]
 
+### Changed
+
+- Evidence flags on `goal check`, `goal evidence` and `goal advance` are
+  repeatable, so one command can record several evidence records. A single
+  triple behaves exactly as before; an unequal count is rejected.
+- `agent-runtime` with no arguments prints usage to standard error and exits
+  non-zero. `help`, `-h` and `--help` still print to standard output and exit
+  zero.
+
+### Fixed
+
+- The distributable Goal schema matches the Go contract. Checklist item
+  identifiers were unconstrained while the runtime enforced an identifier
+  grammar, and receipts accepted any property name while the runtime requires a
+  phase, so a journal the runtime rejects still validated against the published
+  schema.
+- Schema parity now also covers the event `outcome`, `attempt`, subject kind,
+  actor kind and handoff role vocabularies, and checks the Goal identifier
+  grammar behaviourally against the state machine in both directions.
+
 ## [0.1.0] - 2026-08-13
 
 ### Added
