@@ -22,10 +22,11 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	governance := readSchema(t, "schemas/repository-governance-v1alpha1.schema.json")
 	releaseContract := readSchema(t, "schemas/release-contract-v1alpha1.schema.json")
 	releaseManifest := readSchema(t, "schemas/release-manifest-v1alpha1.schema.json")
+	releaseBuildResult := readSchema(t, "schemas/release-build-result-v1alpha1.schema.json")
 	provenance := readSchema(t, "schemas/provenance-contract-v1alpha1.schema.json")
 	fuzz := readSchema(t, "schemas/fuzz-contract-v1alpha1.schema.json")
-	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance, "release contract": releaseContract, "release manifest": releaseManifest, "provenance": provenance, "fuzz": fuzz} {
-		if schema["x-license"] != "AGPL-3.0-only" {
+	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance, "release contract": releaseContract, "release manifest": releaseManifest, "release build result": releaseBuildResult, "provenance": provenance, "fuzz": fuzz} {
+		if schema["x-license"] != releasepkg.CanonicalLicense {
 			t.Errorf("%s schema license=%v", name, schema["x-license"])
 		}
 	}
@@ -34,6 +35,10 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	}
 	if releaseContract["properties"].(map[string]any)["version"].(map[string]any)["const"] != "v0.1.0" || releaseManifest["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != "v1alpha1" {
 		t.Fatal("release schema identity drift")
+	}
+	buildResultProperties := releaseBuildResult["properties"].(map[string]any)
+	if buildResultProperties["license"].(map[string]any)["const"] != releasepkg.CanonicalLicense || buildResultProperties["schema_version"].(map[string]any)["const"] != releasepkg.BuildResultSchemaVersion {
+		t.Fatal("release build result license/schema identity drift")
 	}
 	if provenance["properties"].(map[string]any)["integration_openpgp_status"].(map[string]any)["const"] != "active" || provenance["properties"].(map[string]any)["trust_update_policy"].(map[string]any)["const"] != "reviewed-contract-change" {
 		t.Fatal("provenance trust policy schema drift")
