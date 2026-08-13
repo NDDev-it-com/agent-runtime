@@ -28,8 +28,14 @@ covers every other asset and deliberately does not checksum itself.
 2. Run `go run ./cmd/check-module-tidy`. This is the authoritative non-mutating
    module gate: it executes `GOTOOLCHAIN=local go mod tidy -diff` and uses that
    command's own status and output. It never compares feature work with `HEAD`.
-3. Verify the exact commit with
-   `go run ./cmd/check-signature --commit "$(git rev-parse HEAD)"`. The verifier
+3. Verify each PR source commit with
+   `go run ./cmd/check-signature --commit "$(git rev-parse HEAD)"`. After merge,
+   verify the integration graph with
+   `GH_TOKEN=... go run ./cmd/check-provenance --integration "$(git rev-parse HEAD)"`.
+   The graph has three distinct roles:
+   owner SSH-signed source commits, a GitHub OpenPGP-signed two-parent merge
+   commit bound to the exact PR base/head/tree and successful exact-head check
+   identities, and the owner SSH-signed annotated release tag. The verifier
    uses only the repository-owned `.github/release-allowed-signers` snapshot and
    binds verification to held ancestor directory identities. On Darwin, the
    only accepted ancestor alias is the root-owned canonical
@@ -37,6 +43,12 @@ covers every other asset and deliberately does not checksum itself.
    Every alias and directory identity is revalidated before and after Git runs.
    The verifier uses command-local Git configuration; it never reads or writes
    ambient Git trust.
+   Integration verification is native Go on Linux and macOS. Its sole provider
+   public key, fingerprint, byte digest, active status and reviewed-change-only
+   rotation/revocation policy live in `provenance/v1alpha1.json`; it uses no
+   ambient GPG executable, keyring, home directory, global Git configuration or
+   author identity. Trust changes require a reviewed contract, schema and key
+   update and invalidate old or revoked material fail closed.
 4. Run `go run ./cmd/check-cold-compile`. It uses a fresh isolated build cache
    for every supported `darwin/linux` and `amd64/arm64` combination, compiling
    all packages, commands, tests and applicable platform files without running

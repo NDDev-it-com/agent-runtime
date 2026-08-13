@@ -5,6 +5,9 @@
   "go_compatibility": "1.24",
   "license": "AGPL-3.0-only",
   "dependencies": [
+    {"module_path": "github.com/ProtonMail/go-crypto", "version": "v1.4.1", "license": "BSD-3-Clause"},
+    {"module_path": "github.com/cloudflare/circl", "version": "v1.6.2", "license": "BSD-3-Clause", "indirect": true},
+    {"module_path": "golang.org/x/crypto", "version": "v0.41.0", "license": "BSD-3-Clause", "indirect": true},
     {"module_path": "golang.org/x/mod", "version": "v0.27.0", "license": "BSD-3-Clause"},
     {"module_path": "golang.org/x/sys", "version": "v0.40.0", "license": "BSD-3-Clause"}
   ],

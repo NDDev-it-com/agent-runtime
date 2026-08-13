@@ -12,10 +12,7 @@
     "module_path": {"const": "github.com/NDDev-it-com/agent-runtime"},
     "go_compatibility": {"const": "1.24"},
     "license": {"const": "AGPL-3.0-only"},
-    "dependencies": {"type": "array", "minItems": 2, "maxItems": 2, "prefixItems": [
-      {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"const": "golang.org/x/mod"}, "version": {"const": "v0.27.0"}, "license": {"const": "BSD-3-Clause"}}},
-      {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"const": "golang.org/x/sys"}, "version": {"const": "v0.40.0"}, "license": {"const": "BSD-3-Clause"}}}
-    ], "items": false},
+    "dependencies": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"enum": ["github.com/ProtonMail/go-crypto", "github.com/cloudflare/circl", "golang.org/x/crypto", "golang.org/x/mod", "golang.org/x/sys"]}, "version": {"pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"}, "license": {"const": "BSD-3-Clause"}, "indirect": {"type": "boolean"}}}},
     "source_commit": {"const": "HEAD"},
     "archive_prefix": {"const": "agent-runtime-v0.1.0/"},
     "workflow": {"const": ".github/workflows/release.yml"},

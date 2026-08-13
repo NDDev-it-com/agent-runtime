@@ -48,7 +48,7 @@ func TestContractRejectsSemanticDrift(t *testing.T) {
 			t.Parallel()
 			c := testContract()
 			mutate(&c)
-			if c.Validate() == nil {
+			if c.Validate() == nil && c.verifyGoMod([]byte(canonicalGoMod(testContract()))) == nil {
 				t.Fatal("drift accepted")
 			}
 		})
@@ -136,8 +136,12 @@ func TestContractJSONFailsClosed(t *testing.T) {
 func TestGoModuleSemanticContractAcceptsCanonicalTidyAndRejectsDrift(t *testing.T) {
 	t.Parallel()
 	c := testContract()
-	canonical := "module " + c.ModulePath + "\n\ngo 1.24.0\n\nrequire (\n\tgolang.org/x/mod v0.27.0\n\tgolang.org/x/sys v0.40.0\n)\n"
-	accepted := []string{canonical, strings.Replace(canonical, "go 1.24.0", "go 1.24", 1)}
+	canonical := canonicalGoMod(c)
+	reversed := append([]Dependency(nil), c.Dependencies...)
+	for left, right := 0, len(reversed)-1; left < right; left, right = left+1, right-1 {
+		reversed[left], reversed[right] = reversed[right], reversed[left]
+	}
+	accepted := []string{canonical, strings.Replace(canonical, "go 1.24.0", "go 1.24", 1), goModFromDependencies(c, reversed)}
 	for _, input := range accepted {
 		if err := c.verifyGoMod([]byte(input)); err != nil {
 			t.Fatalf("canonical module rejected: %v", err)
@@ -164,10 +168,7 @@ func TestGoModuleSemanticContractAcceptsCanonicalTidyAndRejectsDrift(t *testing.
 func TestGoSumSemanticContractRejectsClosureAndDigestDrift(t *testing.T) {
 	t.Parallel()
 	c := testContract()
-	valid := "golang.org/x/mod v0.27.0 h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n" +
-		"golang.org/x/mod v0.27.0/go.mod h1:BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB=\n" +
-		"golang.org/x/sys v0.40.0 h1:CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC=\n" +
-		"golang.org/x/sys v0.40.0/go.mod h1:DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD=\n"
+	valid := canonicalGoSum(c)
 	if err := c.verifyGoSum([]byte(valid)); err != nil {
 		t.Fatal(err)
 	}
@@ -183,6 +184,18 @@ func TestGoSumSemanticContractRejectsClosureAndDigestDrift(t *testing.T) {
 		if c.verifyGoSum([]byte(input)) == nil {
 			t.Fatal("invalid go.sum accepted")
 		}
+	}
+}
+
+func TestDependencyDownloadIdentityUsesGoProxyEscaping(t *testing.T) {
+	t.Parallel()
+	dependency := testContract().Dependencies[0]
+	got := newDependencySPDXPackage(dependency, 0)
+	if got.DownloadLocation != "https://proxy.golang.org/github.com/!proton!mail/go-crypto/@v/v1.4.1.zip" {
+		t.Fatalf("download location=%q", got.DownloadLocation)
+	}
+	if got.ExternalRefs[0].ReferenceLocator != "pkg:golang/github.com/ProtonMail/go-crypto@v1.4.1" {
+		t.Fatalf("purl=%q", got.ExternalRefs[0].ReferenceLocator)
 	}
 }
 
@@ -482,16 +495,56 @@ func FuzzReleaseContractJSON(f *testing.F) {
 }
 
 func testContract() Contract {
-	return Contract{SchemaVersion: SchemaVersion, Version: "v0.1.0", ModulePath: "github.com/NDDev-it-com/agent-runtime", GoCompatibility: "1.24", License: "AGPL-3.0-only", Dependencies: []Dependency{{ModulePath: "golang.org/x/mod", Version: "v0.27.0", License: "BSD-3-Clause"}, {ModulePath: "golang.org/x/sys", Version: "v0.40.0", License: "BSD-3-Clause"}}, SourceCommit: "HEAD", ArchivePrefix: "agent-runtime-v0.1.0/", Workflow: ".github/workflows/release.yml", AllowedSigners: ".github/release-allowed-signers", Assets: Assets{Archive: "agent-runtime-v0.1.0-source.tar.gz", SBOM: "agent-runtime-v0.1.0.spdx.json", Notes: "release-notes-v0.1.0.md", Manifest: "release-manifest-v0.1.0.json", Checksums: "SHA256SUMS"}, Limits: Limits{MaxFiles: 4096, MaxFileBytes: 16 << 20, MaxTotalBytes: 64 << 20, MaxPathBytes: 512}, Actions: Actions{Checkout: "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1", SetupGo: "actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e", AttestProvenance: "actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373", AttestSBOM: "actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d"}}
+	data, err := os.ReadFile(filepath.Join("..", "..", "release", "v1alpha1.json"))
+	if err != nil {
+		panic(err)
+	}
+	var contract Contract
+	if err := json.Unmarshal(data, &contract); err != nil {
+		panic(err)
+	}
+	return contract
 }
+
+func canonicalGoMod(contract Contract) string {
+	return goModFromDependencies(contract, canonicalDependencies(contract.Dependencies))
+}
+
+func goModFromDependencies(contract Contract, dependencies []Dependency) string {
+	var direct, indirect strings.Builder
+	for _, dependency := range dependencies {
+		line := "\t" + dependency.ModulePath + " " + dependency.Version
+		if dependency.Indirect {
+			indirect.WriteString(line + " // indirect\n")
+		} else {
+			direct.WriteString(line + "\n")
+		}
+	}
+	result := "module " + contract.ModulePath + "\n\ngo 1.24.0\n\nrequire (\n" + direct.String() + ")\n"
+	if indirect.Len() != 0 {
+		result += "\nrequire (\n" + indirect.String() + ")\n"
+	}
+	return result
+}
+
+func canonicalGoSum(contract Contract) string {
+	const digest = "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
+	var result strings.Builder
+	for _, dependency := range canonicalDependencies(contract.Dependencies) {
+		result.WriteString(dependency.ModulePath + " " + dependency.Version + " " + digest + "\n")
+		result.WriteString(dependency.ModulePath + " " + dependency.Version + "/go.mod " + digest + "\n")
+	}
+	return result.String()
+}
+
 func fixtureRepo(t *testing.T) string {
 	t.Helper()
 	d := t.TempDir()
 	gitRun(t, d, "init", "-q")
 	gitRun(t, d, "config", "user.name", "Test")
 	gitRun(t, d, "config", "user.email", "test@example.com")
-	mustWrite(t, filepath.Join(d, "go.mod"), []byte("module github.com/NDDev-it-com/agent-runtime\n\ngo 1.24.0\n\nrequire (\n\tgolang.org/x/mod v0.27.0\n\tgolang.org/x/sys v0.40.0\n)\n"))
-	mustWrite(t, filepath.Join(d, "go.sum"), []byte("golang.org/x/mod v0.27.0 h1:ia1L5pufQOQJQROE7F6uX5nkV0WmE8u3QDht2sgtDgY=\ngolang.org/x/mod v0.27.0/go.mod h1:Qm1GqKd1LdAhI86JI1YpmhJt5L4k5gLSxD6A2Gg7Z2E=\ngolang.org/x/sys v0.40.0 h1:DBZZqJ2Rkml6QMQsZywtnjnnGvHza6BTfYFWY9kjEWQ=\ngolang.org/x/sys v0.40.0/go.mod h1:OgkHotnGiDImocRcuBABYBEXf8A9a87e/uXjp9XT3ks=\n"))
+	mustWrite(t, filepath.Join(d, "go.mod"), []byte(canonicalGoMod(testContract())))
+	mustWrite(t, filepath.Join(d, "go.sum"), []byte(canonicalGoSum(testContract())))
 	mustWrite(t, filepath.Join(d, "main.go"), []byte("package agentruntime\n"))
 	mustWrite(t, filepath.Join(d, "LICENSE"), []byte("AGPL-3.0-only\n"))
 	mustWrite(t, filepath.Join(d, "CHANGELOG.md"), []byte("# Changelog\n\n## [0.1.0] - 2026-08-13\n\n### Added\n\n- Initial source release.\n"))

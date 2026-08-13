@@ -33,10 +33,18 @@ jobs:
       - run: go build ./cmd/agent-runtime
       - name: Cold-compile every supported platform variant
         run: go run ./cmd/check-cold-compile
-      - name: Verify exact source commit signature against repository trust
+      - name: Verify typed exact source or integration provenance
         env:
+          GH_TOKEN: ${{ github.token }}
           EXPECTED_COMMIT: ${{ github.event.pull_request.head.sha || github.sha }}
-        run: go run ./cmd/check-signature --commit "$EXPECTED_COMMIT"
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = pull_request ]; then
+            go run ./cmd/check-signature --commit "$EXPECTED_COMMIT"
+          else
+            go run ./cmd/check-provenance --integration "$EXPECTED_COMMIT"
+          fi
       - name: Verify module metadata is tidy without mutation
         run: go run ./cmd/check-module-tidy
       - run: go run ./cmd/check-ci-contract
