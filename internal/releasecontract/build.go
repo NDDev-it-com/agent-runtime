@@ -100,31 +100,46 @@ type relationship struct {
 }
 
 func Build(root, commit, out string, c Contract) error {
+	_, err := BuildWithResult(root, commit, out, c)
+	return err
+}
+
+func BuildWithResult(root, commit, out string, c Contract) (BuildResult, error) {
 	if err := c.Validate(); err != nil {
-		return err
+		return BuildResult{}, err
 	}
 	resolved, err := git(root, "rev-parse", "--verify", commit+"^{commit}")
 	if err != nil {
-		return fmt.Errorf("resolve source commit: %w", err)
+		return BuildResult{}, fmt.Errorf("resolve source commit: %w", err)
 	}
 	resolved = strings.TrimSpace(resolved)
 	commitTimeRaw, err := git(root, "show", "-s", "--format=%ct", resolved)
 	if err != nil {
-		return err
+		return BuildResult{}, err
 	}
 	epoch, err := strconv.ParseInt(strings.TrimSpace(commitTimeRaw), 10, 64)
 	if err != nil {
-		return fmt.Errorf("parse commit time: %w", err)
+		return BuildResult{}, fmt.Errorf("parse commit time: %w", err)
 	}
 	files, err := readTree(root, resolved, c.Limits)
 	if err != nil {
-		return err
+		return BuildResult{}, err
 	}
 	assets, err := buildBundleData(files, resolved, time.Unix(epoch, 0).UTC(), c)
 	if err != nil {
-		return err
+		return BuildResult{}, err
 	}
-	return publishBundle(out, c, assets)
+	result, err := newBuildResult(out, resolved, c, assets)
+	if err != nil {
+		return BuildResult{}, err
+	}
+	if err := publishBundle(out, c, assets); err != nil {
+		return BuildResult{}, err
+	}
+	if err := ValidateBuildResult(result, out, c); err != nil {
+		return BuildResult{}, fmt.Errorf("validate published build result: %w", err)
+	}
+	return result, nil
 }
 
 func buildBundleData(files []gitFile, resolved string, commitTime time.Time, c Contract) (map[string][]byte, error) {

@@ -66,7 +66,12 @@ jobs:
       - name: Validate contract and build deterministic bundle
         run: |
           set -euo pipefail
-          go run ./cmd/check-release-contract --contract "$RELEASE_CONTRACT" --expect-version "$GITHUB_REF_NAME" --build --commit HEAD --out "${RUNNER_TEMP}/release-dist"
+          release_parent="$(mktemp -d)"
+          release_dist="${release_parent}/release-dist"
+          release_result="${release_parent}/build-result.json"
+          go run ./cmd/check-release-contract --contract "$RELEASE_CONTRACT" --expect-version "$GITHUB_REF_NAME" --build --commit HEAD --out "$release_dist" --result "$release_result"
+          go run ./cmd/check-release-contract --contract "$RELEASE_CONTRACT" --out "$release_dist" --verify-result "$release_result"
+          echo "RELEASE_DIST=$release_dist" >>"$GITHUB_ENV"
           {
             echo '### Release bundle'
             echo
@@ -74,17 +79,17 @@ jobs:
             echo "- Commit: \`$(git rev-parse HEAD)\`"
             echo "- Go: \`$(go version)\`"
             echo '- Assets:'
-            sed 's/^/  - `/' "${RUNNER_TEMP}/release-dist/SHA256SUMS" | sed 's/$/`/'
+            sed 's/^/  - `/' "$release_dist/SHA256SUMS" | sed 's/$/`/'
           } >>"${GITHUB_STEP_SUMMARY}"
       - name: Attest every material release asset
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
         with:
-          subject-path: ${{ runner.temp }}/release-dist/*
+          subject-path: ${{ env.RELEASE_DIST }}/*
       - name: Bind SPDX SBOM to source archive
         uses: actions/attest@508db95dd578ae2727ebd6217d5ba78e4fbda05d # v4.2.1
         with:
-          subject-path: ${{ runner.temp }}/release-dist/agent-runtime-${{ github.ref_name }}-source.tar.gz
-          sbom-path: ${{ runner.temp }}/release-dist/agent-runtime-${{ github.ref_name }}.spdx.json
+          subject-path: ${{ env.RELEASE_DIST }}/agent-runtime-${{ github.ref_name }}-source.tar.gz
+          sbom-path: ${{ env.RELEASE_DIST }}/agent-runtime-${{ github.ref_name }}.spdx.json
       - name: Reconcile identity and publish once
         env:
           GH_TOKEN: ${{ github.token }}
@@ -100,7 +105,7 @@ jobs:
             echo "release appeared during build; refusing mutation" >&2
             exit 1
           fi
-          dist="${RUNNER_TEMP}/release-dist"
+          dist="$RELEASE_DIST"
           gh release create "$RELEASE_TAG" \
             --verify-tag \
             --title "$RELEASE_TAG" \

@@ -1,0 +1,48 @@
+{
+  "x_license": "AGPL-3.0-only",
+  "pull_request": {
+    "id": 4272953136,
+    "node_id": "PR_kwDOT22ecs7-sBcw",
+    "number": 14,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "a774023cb94b2aba0af8ea87d339e770aed49940",
+    "merged_at": "2026-08-13T16:25:52Z",
+    "merged_by": {"login": "rldyourmnd", "id": 102828838, "node_id": "U_kgDOBiELJg", "type": "User"},
+    "base": {"ref": "main", "sha": "c25bb992d745ab8c8e83362a1a826fd793fe1f1e", "repo": {"id": 1332584050, "node_id": "R_kgDOT22ecg"}},
+    "head": {"ref": "fix/provenance-attribution-recovery1", "sha": "6ddfea2f2cb8af0ecb17e151ec9cf1de51e90e4c", "repo": {"id": 1332584050, "node_id": "R_kgDOT22ecg"}},
+    "commits": 1
+  },
+  "integration_commit": {
+    "sha": "a774023cb94b2aba0af8ea87d339e770aed49940",
+    "node_id": "C_kwDOT22ectoAKGE3NzQwMjNjYjk0YjJhYmEwYWY4ZWE4N2QzMzllNzcwYWVkNDk5NDA",
+    "author": {"login": "rldyourmnd", "id": 102828838, "node_id": "U_kgDOBiELJg", "type": "User"},
+    "committer": {"login": "web-flow", "id": 19864447, "node_id": "MDQ6VXNlcjE5ODY0NDQ3", "type": "User"},
+    "parents": [{"sha": "c25bb992d745ab8c8e83362a1a826fd793fe1f1e"}, {"sha": "6ddfea2f2cb8af0ecb17e151ec9cf1de51e90e4c"}],
+    "commit": {"tree": {"sha": "503faa7846f3ccc03461b0da90aacf878c155872"}}
+  },
+  "graphql_relation": {
+    "data": {"repository": {
+      "id": "R_kgDOT22ecg",
+      "databaseId": 1332584050,
+      "pullRequest": {
+        "id": "PR_kwDOT22ecs7-sBcw",
+        "databaseId": 4272953136,
+        "number": 14,
+        "state": "MERGED",
+        "merged": true,
+        "mergedAt": "2026-08-13T16:25:52Z",
+        "baseRefName": "main",
+        "baseRefOid": "c25bb992d745ab8c8e83362a1a826fd793fe1f1e",
+        "headRefName": "fix/provenance-attribution-recovery1",
+        "headRefOid": "6ddfea2f2cb8af0ecb17e151ec9cf1de51e90e4c",
+        "mergedBy": {"login": "rldyourmnd", "id": "U_kgDOBiELJg", "databaseId": 102828838},
+        "mergeCommit": {
+          "oid": "a774023cb94b2aba0af8ea87d339e770aed49940",
+          "tree": {"oid": "503faa7846f3ccc03461b0da90aacf878c155872"},
+          "parents": {"nodes": [{"oid": "c25bb992d745ab8c8e83362a1a826fd793fe1f1e"}, {"oid": "6ddfea2f2cb8af0ecb17e151ec9cf1de51e90e4c"}]}
+        }
+      }
+    }}
+  }
+}

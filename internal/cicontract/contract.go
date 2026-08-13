@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/NDDev-it-com/agent-runtime/internal/releasecontract"
 )
 
 type Contract struct {
@@ -38,7 +40,7 @@ func Load(path string) (Contract, error) {
 	if err := decoder.Decode(&c); err != nil {
 		return Contract{}, fmt.Errorf("decode contract: %w", err)
 	}
-	if c.SchemaVersion != "v1alpha1" || c.License != "AGPL-3.0-only" || c.Govulncheck.Module == "" || c.Govulncheck.Version == "" || c.Govulncheck.MinimumGo == "" || c.Govulncheck.UpstreamGoMod == "" || c.SecurityGo == "" || c.CompatibilityGo == "" {
+	if c.SchemaVersion != "v1alpha1" || c.License != releasecontract.CanonicalLicense || c.Govulncheck.Module == "" || c.Govulncheck.Version == "" || c.Govulncheck.MinimumGo == "" || c.Govulncheck.UpstreamGoMod == "" || c.SecurityGo == "" || c.CompatibilityGo == "" {
 		return Contract{}, errors.New("contract has missing or unsupported fields")
 	}
 	return c, nil
@@ -72,6 +74,37 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	}
 	if strings.Count(text, "go run ./cmd/check-fuzz") != 1 {
 		return errors.New("workflow must invoke the canonical fuzz verifier exactly once")
+	}
+	if err := verifyReleaseReproductionCommand(text); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyReleaseReproductionCommand(workflow string) error {
+	required := []string{
+		`parent="$(mktemp -d)"`,
+		`first="$parent/first"`,
+		`second="$parent/second"`,
+		`first_result="$parent/first-result.json"`,
+		`second_result="$parent/second-result.json"`,
+		`--build --commit HEAD --out "$first" --result "$first_result"`,
+		`--build --commit HEAD --out "$second" --result "$second_result"`,
+		`--out "$first" --verify-result "$first_result"`,
+		`--out "$second" --verify-result "$second_result"`,
+		`diff -rq "$first" "$second"`,
+	}
+	for _, token := range required {
+		token = strings.ReplaceAll(token, "\\\"", "\"")
+		if strings.Count(workflow, token) != 1 {
+			return fmt.Errorf("release reproduction command requires exactly one %q", token)
+		}
+	}
+	for _, forbidden := range []string{`release/contract.json`, `${TMPDIR}/`, `${RUNNER_TEMP}/`, `mkdir "$first"`, `mkdir "$second"`, `mkdir -p "$first"`, `mkdir -p "$second"`} {
+		forbidden = strings.ReplaceAll(forbidden, "\\\"", "\"")
+		if strings.Contains(workflow, forbidden) {
+			return errors.New("release reproduction command must not pre-create final output leaves")
+		}
 	}
 	return nil
 }

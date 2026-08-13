@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-it-com/agent-runtime/schemas/release-build-result-v1alpha1.schema.json",
+  "title": "agent-runtime release build result v1alpha1",
+  "x-license": "AGPL-3.0-only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "artifact_root", "version", "source_commit", "module_path", "license", "assets"],
+  "properties": {
+    "schema_version": {"const": "v1alpha1"},
+    "artifact_root": {"type": "string", "minLength": 1},
+    "version": {"const": "v0.1.0"},
+    "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "module_path": {"const": "github.com/NDDev-it-com/agent-runtime"},
+    "license": {"const": "AGPL-3.0-only"},
+    "assets": {
+      "type": "array",
+      "minItems": 5,
+      "maxItems": 5,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "size", "sha256"],
+        "properties": {
+          "name": {"type": "string", "minLength": 1},
+          "size": {"type": "integer", "minimum": 0},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+        }
+      }
+    }
+  }
+}
