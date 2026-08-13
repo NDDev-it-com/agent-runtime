@@ -125,7 +125,7 @@ func TestGoalCompletionCarriesTypedDebtWithoutSummary(t *testing.T) {
 		t.Fatal(err)
 	}
 	evidence := []goalpkg.Evidence{{Type: goalpkg.EvidenceTest, Reference: "gate", Result: "passed"}}
-	for _, phase := range goalpkg.Phases[:len(goalpkg.Phases)-1] {
+	for _, phase := range goalpkg.Phases()[:len(goalpkg.Phases())-1] {
 		if err := j.Advance(goalpkg.Receipt{Phase: phase, Summary: "complete", Evidence: evidence}, now); err != nil {
 			t.Fatal(err)
 		}
@@ -252,7 +252,7 @@ func completeGoalLifecycleDrafts(t *testing.T, ctx Context) []Draft {
 	})
 	mutate(func(j *goalpkg.Journal) error { return j.CompleteItem("done", evidence, fixedTime.Add(2*time.Second)) })
 	mutate(func(j *goalpkg.Journal) error { return j.CompleteItem("extra", evidence, fixedTime.Add(3*time.Second)) })
-	for index, phase := range goalpkg.Phases[:len(goalpkg.Phases)-1] {
+	for index, phase := range goalpkg.Phases()[:len(goalpkg.Phases())-1] {
 		phase := phase
 		mutate(func(j *goalpkg.Journal) error {
 			return j.Advance(goalpkg.Receipt{Phase: phase, Summary: "complete", Evidence: evidence}, fixedTime.Add(time.Duration(index+4)*time.Second))
