@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 18,
+  "revision": 26,
   "goal": {
     "id": "structured-observability",
     "intent": "Deliver production-grade provider-neutral lifecycle events and redaction-aware sinks without weakening authoritative Task and Goal contracts",
@@ -8,37 +8,86 @@
       {
         "id": "canonical-issues",
         "acceptance": "Product issue #3 defines implementation acceptance and PR backlink; governance issue #4 remains separate",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/3",
+            "result": "Product acceptance and lineage recorded; governance issue #4 remains open and separate."
+          }
+        ]
       },
       {
         "id": "event-contract",
         "acceptance": "Immutable v1alpha1 envelopes cover Task, Goal and handoff lifecycles with bounded canonical identity, causality, ordering, actor/runtime, attempts, outcomes and typed evidence",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "commit",
+            "reference": "b67784e3c43480c3aae7996bd8e1dd5bf61b0513",
+            "result": "Immutable bounded v1alpha1 Task, Goal and handoff envelopes merged."
+          }
+        ]
       },
       {
         "id": "redaction",
         "acceptance": "Deterministic typed redaction occurs before every sink boundary, denies unsafe content by default, bounds structures and exposes safe decisions",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "observability redaction and leak suites",
+            "result": "Typed deterministic fail-closed redaction and leak-negative coverage pass."
+          }
+        ]
       },
       {
         "id": "sinks",
         "acceptance": "Composable sink contract includes durable JSONL and memory sinks with explicit failure, backpressure, retry, idempotency, flush and close semantics",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "observability memory/JSONL/replay suites",
+            "result": "Bounded composable sink failure, replay, retry, flush and close semantics pass."
+          }
+        ]
       },
       {
         "id": "compatibility",
         "acceptance": "Existing Task/Goal APIs, schemas, journals and Go 1.24 compatibility remain valid and rollback needs no journal migration",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31663261083",
+            "result": "Post-merge Ubuntu/macOS Go 1.24 compatibility, race, vet, build and CI contract green."
+          }
+        ]
       },
       {
         "id": "deep-tests",
         "acceptance": "Lifecycle, schema, canonical serialization, concurrency, retry, replay, partial write, failure, redaction leaks, Unicode/binary/oversize, race/fuzz and cross-platform behavior are verified",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31663186370",
+            "result": "Exact feature head lifecycle/schema/replay/redaction/race/vet and govulncheck checks green."
+          }
+        ]
       },
       {
         "id": "publication",
         "acceptance": "Signed feature PR linked to issue #3 merges only after full green checks; exact merged main is verified and synchronized cleanly",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "commit",
+            "reference": "a0a777a38e824435456f433efda69f5632bee60a",
+            "result": "PR #5 merged without rewrite; exact merged main passed CI and CodeQL."
+          }
+        ]
       }
     ],
     "non_goals": [
@@ -47,9 +96,38 @@
       "Persist raw prompts, commands, environment values, provider payloads or live secrets",
       "Change repository branch-rule governance in this code Goal"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Issue #3 observability substrate is implemented, reconciled, independently reviewed, omission-audited, locally and remotely verified, merged and post-main verified. Recovery-cycle 3 Attempt1 race failure and Attempt2 repair evidence are preserved. Governance issue #4 remains typed separate debt.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/5",
+            "result": "Signed feature head merged as a0a777a38e824435456f433efda69f5632bee60a after exact-head CI and CodeQL green."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:15:01.012819Z",
+        "closure": {
+          "achieved_outcome": "Production-grade provider-neutral lifecycle events and redaction-aware memory/JSONL sinks are merged without weakening Task/Goal guarantees.",
+          "cleanup": "Feature branch publication completed; main synchronized; no temporary artifacts, releases, sibling edits or direct-main mutations.",
+          "remaining": [
+            {
+              "kind": "debt",
+              "summary": "Repository governance enforcement remains tracked exclusively by open issue #4."
+            }
+          ],
+          "next_work": [
+            {
+              "type": "issue",
+              "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/4",
+              "result": "Canonical bounded next action: independently enforce required CI and CodeQL branch rules."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Asked what may have been forgotten: audited mutable package globals, every testEvidence and closureReceipt call site, t.Parallel consumers, nested slices/pointers, nil-versus-empty Remaining semantics, schema/container tests, replay/sink fixtures, TODOs, terminology and governance separation. No second shared mutable fixture or semantic vocabulary fork remains; issue #4 stays open.",
@@ -186,6 +264,6 @@
       }
     },
     "created_at": "2026-08-13T02:13:28.471584Z",
-    "updated_at": "2026-08-13T03:11:32.861424Z"
+    "updated_at": "2026-08-13T03:15:01.012819Z"
   }
 }
