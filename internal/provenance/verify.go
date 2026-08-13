@@ -60,11 +60,14 @@ type githubClient struct {
 }
 
 type pullResponse struct {
-	ID             int64     `json:"id"`
-	NodeID         string    `json:"node_id"`
-	Number         int       `json:"number"`
-	State          string    `json:"state"`
-	Merged         bool      `json:"merged"`
+	ID     int64  `json:"id"`
+	NodeID string `json:"node_id"`
+	Number int    `json:"number"`
+	State  string `json:"state"`
+	Merged bool   `json:"merged"`
+	// MergeCommitSHA is retained as diagnostic REST evidence only. GitHub
+	// documents its value as state- and merge-method-dependent; attribution is
+	// instead bound by the GraphQL merged relation and REST/local commit object.
 	MergeCommitSHA string    `json:"merge_commit_sha"`
 	MergedAt       time.Time `json:"merged_at"`
 	MergedBy       apiActor  `json:"merged_by"`
@@ -266,7 +269,7 @@ func validateIntegrationIdentity(contract Contract, pull pullResponse, graph gra
 	if contract.MergeMethod != "merge" {
 		return errors.New("integration contract does not require a two-parent merge")
 	}
-	if commit.SHA != pull.MergeCommitSHA || len(commit.Parents) != 2 || commit.Parents[0].SHA != pull.Base.SHA || commit.Parents[1].SHA != pull.Head.SHA || !fullSHA.MatchString(commit.Commit.Tree.SHA) {
+	if len(commit.Parents) != 2 || commit.Parents[0].SHA != pull.Base.SHA || commit.Parents[1].SHA != pull.Head.SHA || !fullSHA.MatchString(commit.Commit.Tree.SHA) {
 		return errors.New("integration SHA, parent order, PR base/head, or tree identity differs")
 	}
 	relation := graph.Data.Repository.Pull.MergeCommit
@@ -288,7 +291,6 @@ func validatePullIdentity(contract Contract, request VerifyRequest, pull pullRes
 		{pull.Number == request.PullRequest, "pull_request.number"},
 		{pull.State == "closed" && pull.Merged, "pull_request.state"},
 		{!pull.MergedAt.IsZero(), "pull_request.merged_at"},
-		{fullSHA.MatchString(pull.MergeCommitSHA), "pull_request.merge_commit_sha"},
 		{pull.MergedBy.Login == contract.OwnerLogin && pull.MergedBy.ID == contract.OwnerDatabaseID && pull.MergedBy.NodeID == contract.OwnerNodeID && pull.MergedBy.Type == "User", "pull_request.merged_by"},
 		{pull.Base.Ref == "main" && fullSHA.MatchString(pull.Base.SHA), "pull_request.base"},
 		{pull.Head.Ref != "" && fullSHA.MatchString(pull.Head.SHA), "pull_request.head"},
@@ -348,10 +350,6 @@ func selectIntegrationPull(ctx context.Context, client githubClient, request Ver
 			rejections = append(rejections, fmt.Sprintf("pr-%d:%s", candidate.Number, err))
 			continue
 		}
-		// GraphQL mergeCommit is the authoritative post-merge relation. Normalize
-		// the stateful REST merge_commit_sha only after the independent relation
-		// has bound this PR to the exact requested integration commit.
-		pull.MergeCommitSHA = graph.Data.Repository.Pull.MergeCommit.OID
 		matches = append(matches, match{pull: pull, graph: graph})
 	}
 	if len(matches) != 1 {

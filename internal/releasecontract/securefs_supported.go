@@ -26,6 +26,8 @@ type fileIdentity struct{ dev, ino uint64 }
 
 type fdRole string
 
+type directoryTrustRole string
+
 const (
 	fdRoleAnchorRoot         fdRole = "anchor_root"
 	fdRoleAnchorParent       fdRole = "anchor_parent"
@@ -37,6 +39,9 @@ const (
 	fdRoleRevalidationParent fdRole = "revalidation_parent"
 	fdRoleEnumeration        fdRole = "enumeration"
 	fdRoleTestFixture        fdRole = "test_fixture"
+	directoryRoleAncestor    directoryTrustRole = "traversed_ancestor"
+	directoryRoleCallerParent directoryTrustRole = "caller_owned_parent"
+	directoryRoleStage       directoryTrustRole = "builder_owned_stage"
 )
 
 type fdOwnership struct {
@@ -103,7 +108,6 @@ type assetRecord struct {
 type anchoredNode struct {
 	name     string
 	identity fileIdentity
-	created  bool
 	fd       fdOwner
 }
 
@@ -190,21 +194,43 @@ func publishBundle(output string, c Contract, assets map[string][]byte) error {
 
 func publishBundleWithOptions(output string, c Contract, content map[string][]byte, opts transactionOptions) (rootErr error) {
 	opts = normalizeTransactionOptions(opts)
-	anchor, err := openAnchoredParent(output, true, opts)
+	anchor, err := openAnchoredParent(output, opts)
 	if err != nil {
-		return err
+		return outputError(OutputInvalidParent, "open existing private parent", err)
 	}
 	tx := &bundleTransaction{anchor: anchor, stage: invalidFDOwner(), assetIDs: map[string]*assetRecord{}, finalName: anchor.final, opts: opts}
 	defer func() {
 		cleanupErr := tx.rollback(c)
 		anchorErr := anchor.release(rootErr != nil || cleanupErr != nil, opts)
-		rootErr = joinRootCleanup(rootErr, orderedErrors(cleanupErr, anchorErr))
+		cleanupErr = orderedErrors(cleanupErr, anchorErr)
+		rootErr = joinRootCleanup(rootErr, cleanupErr)
+		if cleanupErr != nil {
+			rootErr = outputError(OutputCleanup, "rollback and descriptor release", rootErr)
+		} else if rootErr != nil {
+			var typed *OutputError
+			if !errors.As(rootErr, &typed) {
+				kind := OutputPartial
+				if !tx.published && tx.stageName == "" {
+					kind = OutputInvalidParent
+				}
+				rootErr = outputError(kind, "publish bundle", rootErr)
+			}
+		}
 	}()
+	if err = validatePrivateOutputParent(anchor); err != nil {
+		return outputError(OutputInvalidParent, "validate existing private parent", err)
+	}
+	var destination unix.Stat_t
+	if statErr := unix.Fstatat(anchor.parentFD(), anchor.final, &destination, unix.AT_SYMLINK_NOFOLLOW); statErr == nil {
+		return outputError(OutputDestinationExists, "validate non-existent final leaf", unix.EEXIST)
+	} else if !errors.Is(statErr, unix.ENOENT) {
+		return outputError(OutputInvalidParent, "inspect final leaf", statErr)
+	}
 	if err = tx.callHook("after_anchor"); err != nil {
 		return err
 	}
 	if err = anchor.revalidate(opts); err != nil {
-		return fmt.Errorf("revalidate anchor before stage: %w", err)
+		return outputError(OutputIdentityChanged, "revalidate anchor before stage", err)
 	}
 	if err = tx.createStage(); err != nil {
 		return err
@@ -229,10 +255,10 @@ func publishBundleWithOptions(output string, c Contract, content map[string][]by
 		return err
 	}
 	if err = tx.revalidateStage(c, content); err != nil {
-		return err
+		return outputError(OutputIdentityChanged, "revalidate staged bundle", err)
 	}
 	if err = anchor.revalidate(opts); err != nil {
-		return fmt.Errorf("revalidate anchor before publish: %w", err)
+		return outputError(OutputIdentityChanged, "revalidate anchor before publish", err)
 	}
 	if err = opts.fsync(tx.stage.handle()); err != nil {
 		return fmt.Errorf("fsync stage directory: %w", err)
@@ -244,13 +270,16 @@ func publishBundleWithOptions(output string, c Contract, content map[string][]by
 		return err
 	}
 	if err = tx.revalidateStage(c, content); err != nil {
-		return err
+		return outputError(OutputIdentityChanged, "revalidate staged bundle at publish", err)
 	}
 	if err = anchor.revalidate(opts); err != nil {
-		return fmt.Errorf("revalidate anchor at publish: %w", err)
+		return outputError(OutputIdentityChanged, "revalidate anchor at publish", err)
 	}
 	if err = opts.renameNoReplace(anchor.parentFD(), tx.stageName, anchor.parentFD(), tx.finalName); err != nil {
-		return fmt.Errorf("atomic no-replace publish: %w", err)
+		if errors.Is(err, unix.EEXIST) {
+			return outputError(OutputDestinationExists, "atomic no-replace publish", err)
+		}
+		return outputError(OutputIdentityChanged, "atomic no-replace publish", err)
 	}
 	tx.published = true
 	if err = opts.fsync(anchor.parentFD()); err != nil {
@@ -260,10 +289,10 @@ func publishBundleWithOptions(output string, c Contract, content map[string][]by
 		return err
 	}
 	if err = anchor.revalidate(opts); err != nil {
-		return fmt.Errorf("revalidate anchor after publish: %w", err)
+		return outputError(OutputIdentityChanged, "revalidate anchor after publish", err)
 	}
 	if err = tx.revalidatePublished(c, content); err != nil {
-		return err
+		return outputError(OutputIdentityChanged, "revalidate published bundle", err)
 	}
 	if err = tx.closeAssets(); err != nil {
 		return err
@@ -272,6 +301,46 @@ func publishBundleWithOptions(output string, c Contract, content map[string][]by
 		return err
 	}
 	tx.committed = true
+	return nil
+}
+
+func validatePrivateOutputParent(anchor *anchoredPath) error {
+	if anchor == nil || anchor.parentFD() < 0 {
+		return errors.New("output parent descriptor is absent")
+	}
+	return validateDirectoryRole(anchor.parentFD(), anchor.nodes[len(anchor.nodes)-1].identity, directoryRoleCallerParent)
+}
+
+func validateDirectoryRole(fd int, expected fileIdentity, role directoryTrustRole) error {
+	if fd < 0 {
+		return fmt.Errorf("%s descriptor is absent", role)
+	}
+	var st unix.Stat_t
+	if err := unix.Fstat(fd, &st); err != nil {
+		return fmt.Errorf("fstat %s: %w", role, err)
+	}
+	return validateDirectoryMetadata(st, expected, role, uint32(os.Getuid()))
+}
+
+func validateDirectoryMetadata(st unix.Stat_t, expected fileIdentity, role directoryTrustRole, ownerUID uint32) error {
+	if fileType(st) != uint32(unix.S_IFDIR) || !sameIdentity(identityOf(st), expected) || linkCount(st) < 1 {
+		return fmt.Errorf("%s type, identity, or live-link invariant differs", role)
+	}
+	permissions := filePermissions(st)
+	switch role {
+	case directoryRoleAncestor:
+		return nil
+	case directoryRoleCallerParent:
+		if uint32(st.Uid) != ownerUID || permissions&0o077 != 0 || permissions&0o700 != 0o700 {
+			return errors.New("caller-owned parent must be real-UID-owned, owner-rwx, and inaccessible to group/other")
+		}
+	case directoryRoleStage:
+		if uint32(st.Uid) != ownerUID || permissions != 0o700 {
+			return errors.New("builder-owned stage must be real-UID-owned mode-0700")
+		}
+	default:
+		return errors.New("directory trust role is unknown")
+	}
 	return nil
 }
 
@@ -306,7 +375,7 @@ func readBundleSecure(directory string, c Contract) (assets map[string][]byte, r
 	return assets, nil
 }
 
-func openAnchoredParent(target string, create bool, opts transactionOptions) (*anchoredPath, error) {
+func openAnchoredParent(target string, opts transactionOptions) (*anchoredPath, error) {
 	clean := filepath.Clean(target)
 	if clean != target || clean == "." || strings.ContainsRune(target, 0) {
 		return nil, errors.New("output path must be non-empty and host-canonical")
@@ -342,7 +411,6 @@ func openAnchoredParent(target string, create bool, opts transactionOptions) (*a
 		}
 		parentFD := anchor.parentFD()
 		fd, openErr := unix.Openat(parentFD, component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
-		created := false
 		if openErr != nil {
 			var st unix.Stat_t
 			if statErr := unix.Fstatat(parentFD, component, &st, unix.AT_SYMLINK_NOFOLLOW); statErr == nil && fileType(st) == uint32(unix.S_IFLNK) {
@@ -363,31 +431,23 @@ func openAnchoredParent(target string, create bool, opts transactionOptions) (*a
 				continue
 			}
 		}
-		if errors.Is(openErr, unix.ENOENT) && create {
-			if err = unix.Mkdirat(parentFD, component, 0o755); err != nil {
-				return nil, orderedErrors(fmt.Errorf("mkdirat parent %q: %w", component, err), anchor.release(true, opts))
-			}
-			created = true
-			fd, openErr = unix.Openat(parentFD, component, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
-		}
 		if openErr != nil {
-			var removeErr error
-			if created {
-				removeErr = unix.Unlinkat(parentFD, component, unix.AT_REMOVEDIR)
-			}
-			return nil, orderedErrors(fmt.Errorf("openat parent %q: %w", component, openErr), contextual("remove unopened created parent "+component, removeErr), anchor.release(true, opts))
+			return nil, orderedErrors(fmt.Errorf("openat existing parent %q: %w", component, openErr), anchor.release(true, opts))
 		}
 		id, idErr := identityForFD(fd)
 		if idErr != nil {
 			return nil, orderedErrors(idErr, closeRaw(fd, fdRoleAnchorParent, opts, "close unidentified parent "+component), anchor.release(true, opts))
 		}
-		anchor.nodes = append(anchor.nodes, anchoredNode{name: component, identity: id, created: created, fd: newFDOwner(fd, fdRoleAnchorParent, "parent "+component)})
+		anchor.nodes = append(anchor.nodes, anchoredNode{name: component, identity: id, fd: newFDOwner(fd, fdRoleAnchorParent, "parent "+component)})
+		if roleErr := validateDirectoryRole(fd, id, directoryRoleAncestor); roleErr != nil {
+			return nil, orderedErrors(roleErr, anchor.release(true, opts))
+		}
 	}
 	return anchor, nil
 }
 
 func openAnchoredDirectory(target string, opts transactionOptions) (*anchoredPath, fdOwner, fileIdentity, error) {
-	anchor, err := openAnchoredParent(target, false, opts)
+	anchor, err := openAnchoredParent(target, opts)
 	if err != nil {
 		return nil, invalidFDOwner(), fileIdentity{}, err
 	}
@@ -483,17 +543,11 @@ func safeSymlinkTarget(target string) ([]string, error) {
 	return parts, nil
 }
 
-func (a *anchoredPath) release(removeCreated bool, opts transactionOptions) error {
+func (a *anchoredPath) release(_ bool, opts transactionOptions) error {
 	var errs []error
 	for index := len(a.nodes) - 1; index >= 0; index-- {
 		node := &a.nodes[index]
 		errs = append(errs, node.fd.closeOnce(opts, "close "+node.fd.metadata().ownerResource()))
-		if removeCreated && node.created && index > 0 {
-			err := opts.unlinkat(a.nodes[index-1].fd.handle(), node.name, unix.AT_REMOVEDIR)
-			if !errors.Is(err, unix.ENOENT) {
-				errs = append(errs, contextual("remove created parent "+node.name, err))
-			}
-		}
 	}
 	a.nodes = nil
 	return orderedErrors(errs...)
@@ -531,6 +585,9 @@ func (tx *bundleTransaction) createStage() error {
 		}
 		tx.stageName, tx.stageIdentity = name, id
 		tx.stage = newFDOwner(fd, fdRoleStage, "stage directory "+formatIdentity(id))
+		if err := validateDirectoryRole(fd, id, directoryRoleStage); err != nil {
+			return err
+		}
 		return nil
 	}
 	return errors.New("cannot allocate unique release stage")
@@ -619,7 +676,7 @@ func (tx *bundleTransaction) revalidateStage(c Contract, expected map[string][]b
 	if err := unix.Fstatat(tx.anchor.parentFD(), tx.stageName, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
 		return fmt.Errorf("stage entry missing: %w", err)
 	}
-	if fileType(st) != uint32(unix.S_IFDIR) || filePermissions(st) != 0o700 || !sameIdentity(identityOf(st), tx.stageIdentity) {
+	if err := validateDirectoryRole(tx.stage.handle(), tx.stageIdentity, directoryRoleStage); err != nil || fileType(st) != uint32(unix.S_IFDIR) || !sameIdentity(identityOf(st), tx.stageIdentity) {
 		return errors.New("stage directory identity changed")
 	}
 	entries, err := tx.opts.enumerate(tx.stage.handle())

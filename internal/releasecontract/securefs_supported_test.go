@@ -46,9 +46,40 @@ func TestSecurePublishSuccessNoOverwriteAndNoTemporaryLeak(t *testing.T) {
 	assertNoStageEntries(t, parent)
 	if err := publishBundleWithOptions(out, c, assets, defaultTransactionOptions()); !errors.Is(err, unix.EEXIST) {
 		t.Fatalf("second publisher error=%v", err)
+	} else {
+		assertOutputFailure(t, err, OutputDestinationExists)
 	}
 	if err := VerifyBundle(out, c); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSecurePublishRequiresExistingPrivateParentAndMissingLeaf(t *testing.T) {
+	t.Parallel()
+	c, assets := transactionFixture(t)
+	root := t.TempDir()
+	for _, test := range []struct {
+		name string
+		path string
+		kind OutputFailure
+		prepare func() error
+	}{
+		{name: "missing parent", path: filepath.Join(root, "missing", "release"), kind: OutputInvalidParent},
+		{name: "shared parent mode", path: filepath.Join(root, "shared", "release"), kind: OutputInvalidParent, prepare: func() error { return os.Mkdir(filepath.Join(root, "shared"), 0o755) }},
+		{name: "existing file", path: filepath.Join(root, "file"), kind: OutputDestinationExists, prepare: func() error { return os.WriteFile(filepath.Join(root, "file"), []byte("foreign"), 0o600) }},
+		{name: "existing directory", path: filepath.Join(root, "directory"), kind: OutputDestinationExists, prepare: func() error { return os.Mkdir(filepath.Join(root, "directory"), 0o700) }},
+		{name: "existing symlink", path: filepath.Join(root, "symlink"), kind: OutputDestinationExists, prepare: func() error { return os.Symlink("foreign", filepath.Join(root, "symlink")) }},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			if test.prepare != nil {
+				if err := test.prepare(); err != nil {
+					t.Fatal(err)
+				}
+			}
+			err := publishBundleWithOptions(test.path, c, assets, defaultTransactionOptions())
+			assertOutputFailure(t, err, test.kind)
+		})
 	}
 }
 
@@ -71,6 +102,118 @@ func TestNormalizedFilesystemMetadataContract(t *testing.T) {
 	}
 }
 
+func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
+	t.Parallel()
+	openDirectory := func(t *testing.T, path string) (int, fileIdentity) {
+		t.Helper()
+		fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		identity, err := identityForFD(fd)
+		if err != nil {
+			_ = unix.Close(fd)
+			t.Fatal(err)
+		}
+		return fd, identity
+	}
+	for _, test := range []struct {
+		name string
+		mode os.FileMode
+		role directoryTrustRole
+		wantOK bool
+	}{
+		{name: "caller private 0700", mode: 0o700, role: directoryRoleCallerParent, wantOK: true},
+		{name: "stage private 0700", mode: 0o700, role: directoryRoleStage, wantOK: true},
+		{name: "ancestor shared 0755", mode: 0o755, role: directoryRoleAncestor, wantOK: true},
+		{name: "caller group writable", mode: 0o770, role: directoryRoleCallerParent},
+		{name: "caller world writable", mode: 0o707, role: directoryRoleCallerParent},
+		{name: "caller lacks owner write", mode: 0o500, role: directoryRoleCallerParent},
+		{name: "stage permissive", mode: 0o755, role: directoryRoleStage},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "role")
+			if err := os.Mkdir(path, test.mode); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(path, test.mode); err != nil {
+				t.Fatal(err)
+			}
+			fd, identity := openDirectory(t, path)
+			defer unix.Close(fd)
+			err := validateDirectoryRole(fd, identity, test.role)
+			if test.wantOK && err != nil {
+				t.Fatal(err)
+			}
+			if !test.wantOK && err == nil {
+				t.Fatal("unsafe directory role accepted")
+			}
+		})
+	}
+	t.Run("wrong identity", func(t *testing.T) {
+		fd, identity := openDirectory(t, t.TempDir())
+		defer unix.Close(fd)
+		identity.ino++
+		if err := validateDirectoryRole(fd, identity, directoryRoleCallerParent); err == nil {
+			t.Fatal("substituted identity accepted")
+		}
+	})
+	t.Run("wrong owner", func(t *testing.T) {
+		fd, identity := openDirectory(t, t.TempDir())
+		defer unix.Close(fd)
+		var st unix.Stat_t
+		if err := unix.Fstat(fd, &st); err != nil {
+			t.Fatal(err)
+		}
+		if err := validateDirectoryMetadata(st, identity, directoryRoleCallerParent, uint32(st.Uid)+1); err == nil {
+			t.Fatal("wrong owner accepted")
+		}
+	})
+	t.Run("unlinked directory", func(t *testing.T) {
+		root := t.TempDir()
+		path := filepath.Join(root, "deleted")
+		if err := os.Mkdir(path, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		fd, identity := openDirectory(t, path)
+		defer unix.Close(fd)
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if err := validateDirectoryRole(fd, identity, directoryRoleCallerParent); err == nil {
+			t.Fatal("unlinked directory accepted")
+		}
+	})
+	t.Run("stale descriptor", func(t *testing.T) {
+		fd, identity := openDirectory(t, t.TempDir())
+		if err := unix.Close(fd); err != nil {
+			t.Fatal(err)
+		}
+		if err := validateDirectoryRole(fd, identity, directoryRoleCallerParent); err == nil {
+			t.Fatal("closed descriptor accepted")
+		}
+	})
+	t.Run("non-directory", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "file")
+		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fd, err := unix.Open(path, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer unix.Close(fd)
+		identity, err := identityForFD(fd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := validateDirectoryRole(fd, identity, directoryRoleCallerParent); err == nil {
+			t.Fatal("regular file accepted as caller parent")
+		}
+	})
+}
+
 func TestAnchoredParentTraversesAndRevalidatesBoundedRelativeSymlink(t *testing.T) {
 	t.Parallel()
 	root := t.TempDir()
@@ -82,7 +225,7 @@ func TestAnchoredParentTraversesAndRevalidatesBoundedRelativeSymlink(t *testing.
 	if err := os.Symlink("actual", alias); err != nil {
 		t.Fatal(err)
 	}
-	anchor, err := openAnchoredParent(filepath.Join(alias, "release"), false, defaultTransactionOptions())
+	anchor, err := openAnchoredParent(filepath.Join(alias, "release"), defaultTransactionOptions())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -135,7 +278,7 @@ func TestAnchoredParentRejectsSymlinkCycle(t *testing.T) {
 	if err := os.Symlink("a", filepath.Join(root, "b")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := openAnchoredParent(filepath.Join(root, "a", "release"), false, defaultTransactionOptions()); err == nil || !strings.Contains(err.Error(), "symlink hop bound") {
+	if _, err := openAnchoredParent(filepath.Join(root, "a", "release"), defaultTransactionOptions()); err == nil || !strings.Contains(err.Error(), "symlink hop bound") {
 		t.Fatalf("symlink cycle did not fail at its bound: %v", err)
 	}
 }
@@ -167,6 +310,7 @@ func TestSecurePublishPartialOwnedSubsetsRollBack(t *testing.T) {
 			if !errors.Is(err, errInjectedRoot) {
 				t.Fatalf("error=%v", err)
 			}
+			assertOutputFailure(t, err, OutputPartial)
 			if _, statErr := os.Lstat(out); !errors.Is(statErr, os.ErrNotExist) {
 				t.Fatalf("partial destination: %v", statErr)
 			}
@@ -224,6 +368,7 @@ func TestSecurePublishDestinationRaceAndConcurrentPublishers(t *testing.T) {
 			if !errors.Is(err, unix.EEXIST) {
 				t.Fatalf("error=%v", err)
 			}
+			assertOutputFailure(t, err, OutputDestinationExists)
 			assertNoStageEntries(t, parent)
 		})
 	}
@@ -411,11 +556,11 @@ func TestSecurePublishAncestorSwapNeverWritesAttackerTree(t *testing.T) {
 	c, assets := transactionFixture(t)
 	root := t.TempDir()
 	parent := filepath.Join(root, "parent")
-	if err := os.Mkdir(parent, 0o755); err != nil {
+	if err := os.Mkdir(parent, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	attacker := filepath.Join(root, "attacker")
-	if err := os.Mkdir(attacker, 0o755); err != nil {
+	if err := os.Mkdir(attacker, 0o700); err != nil {
 		t.Fatal(err)
 	}
 	out := filepath.Join(parent, "release")
@@ -435,6 +580,7 @@ func TestSecurePublishAncestorSwapNeverWritesAttackerTree(t *testing.T) {
 	if err == nil {
 		t.Fatal("ancestor substitution accepted")
 	}
+	assertOutputFailure(t, err, OutputIdentityChanged)
 	entries, readErr := os.ReadDir(attacker)
 	if readErr != nil {
 		t.Fatal(readErr)
@@ -510,6 +656,7 @@ func TestSecurePublishAggregatesRootAndCleanupErrorsDeterministically(t *testing
 			t.Fatalf("missing %v in %v", want, err)
 		}
 	}
+	assertOutputFailure(t, err, OutputCleanup)
 	text := err.Error()
 	positions := []int{strings.Index(text, "injected root failure"), strings.Index(text, "sync cleanup evidence"), strings.Index(text, "unlink cleanup evidence"), strings.Index(text, "close cleanup evidence")}
 	for index, position := range positions {
@@ -714,5 +861,16 @@ func assertNoStageEntries(t *testing.T, parent string) {
 		if strings.HasPrefix(entry.Name(), ".release-stage-") {
 			t.Fatalf("stage leaked: %s", entry.Name())
 		}
+	}
+}
+
+func assertOutputFailure(t *testing.T, err error, want OutputFailure) {
+	t.Helper()
+	if err == nil {
+		t.Fatalf("missing typed output failure %q", want)
+	}
+	var output *OutputError
+	if !errors.As(err, &output) || output.Kind != want || output.Operation == "" || output.Err == nil {
+		t.Fatalf("output failure=%#v error=%v, want %q", output, err, want)
 	}
 }

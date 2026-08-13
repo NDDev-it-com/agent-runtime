@@ -223,7 +223,6 @@ func TestCapturedPullIdentityAndOneFieldMutations(t *testing.T) {
 		"state":          func(value *pullResponse) { value.State = "open" },
 		"merged":         func(value *pullResponse) { value.Merged = false },
 		"merged at":      func(value *pullResponse) { value.MergedAt = time.Time{} },
-		"merge sha":      func(value *pullResponse) { value.MergeCommitSHA = "invalid" },
 		"merger login":   func(value *pullResponse) { value.MergedBy.Login = "substituted" },
 		"merger id":      func(value *pullResponse) { value.MergedBy.ID++ },
 		"merger node":    func(value *pullResponse) { value.MergedBy.NodeID = "substituted" },
@@ -237,6 +236,13 @@ func TestCapturedPullIdentityAndOneFieldMutations(t *testing.T) {
 		"head repo id":   func(value *pullResponse) { value.Head.Repository.ID++ },
 		"head repo node": func(value *pullResponse) { value.Head.Repository.NodeID = "substituted" },
 		"commit bound":   func(value *pullResponse) { value.Commits = 0 },
+	}
+	for _, stateful := range []string{"", "invalid", strings.Repeat("f", 40)} {
+		candidate := canonical
+		candidate.MergeCommitSHA = stateful
+		if err := validatePullIdentity(contract, request, candidate); err != nil {
+			t.Fatalf("stateful REST merge_commit_sha %q became attribution authority: %v", stateful, err)
+		}
 	}
 	for name, mutate := range mutations {
 		name, mutate := name, mutate
@@ -254,39 +260,55 @@ func TestCapturedPullIdentityAndOneFieldMutations(t *testing.T) {
 	}
 }
 
-func TestSanitizedPR11CaptureMatchesTypedIdentity(t *testing.T) {
+func TestSanitizedLiveCapturesMatchTypedIdentity(t *testing.T) {
 	t.Parallel()
-	data, err := os.ReadFile(filepath.Join("testdata", "pr11-sanitized.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var fixture struct {
-		License     string            `json:"x_license"`
-		Pull        pullResponse      `json:"pull_request"`
-		Integration commitResponse    `json:"integration_commit"`
-		Graph       graphPullResponse `json:"graphql_relation"`
-	}
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&fixture); err != nil {
-		t.Fatal(err)
-	}
 	contract, err := Load(filepath.Join("..", "..", "provenance", "v1alpha1.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	request := VerifyRequest{CommitSHA: fixture.Integration.SHA, PullRequest: fixture.Pull.Number}
-	if fixture.License != "AGPL-3.0-only" {
-		t.Fatal("captured fixture license drift")
-	}
-	if err := validatePullIdentity(contract, request, fixture.Pull); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateGraphPullIdentity(contract, request, fixture.Pull, fixture.Graph); err != nil {
-		t.Fatal(err)
-	}
-	if err := validateIntegrationIdentity(contract, fixture.Pull, fixture.Graph, fixture.Integration); err != nil {
-		t.Fatal(err)
+	for _, name := range []string{"pr11-sanitized.json", "pr14-sanitized.json"} {
+		name := name
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			data, err := os.ReadFile(filepath.Join("testdata", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var fixture struct {
+				License     string            `json:"x_license"`
+				Pull        pullResponse      `json:"pull_request"`
+				Integration commitResponse    `json:"integration_commit"`
+				Graph       graphPullResponse `json:"graphql_relation"`
+			}
+			decoder := json.NewDecoder(bytes.NewReader(data))
+			decoder.DisallowUnknownFields()
+			if err := decoder.Decode(&fixture); err != nil {
+				t.Fatal(err)
+			}
+			request := VerifyRequest{CommitSHA: fixture.Integration.SHA, PullRequest: fixture.Pull.Number}
+			if fixture.License != "AGPL-3.0-only" {
+				t.Fatal("captured fixture license drift")
+			}
+			if err := validatePullIdentity(contract, request, fixture.Pull); err != nil {
+				t.Fatal(err)
+			}
+			if err := validateGraphPullIdentity(contract, request, fixture.Pull, fixture.Graph); err != nil {
+				t.Fatal(err)
+			}
+			if err := validateIntegrationIdentity(contract, fixture.Pull, fixture.Graph, fixture.Integration); err != nil {
+				t.Fatal(err)
+			}
+			for _, stateful := range []string{"", "invalid", strings.Repeat("f", 40)} {
+				candidate := fixture.Pull
+				candidate.MergeCommitSHA = stateful
+				if err := validatePullIdentity(contract, request, candidate); err != nil {
+					t.Fatalf("stateful REST merge SHA changed immutable attribution: %v", err)
+				}
+				if err := validateIntegrationIdentity(contract, candidate, fixture.Graph, fixture.Integration); err != nil {
+					t.Fatalf("stateful REST merge SHA changed graph attribution: %v", err)
+				}
+			}
+		})
 	}
 }
 
@@ -296,9 +318,10 @@ func TestIntegrationCommitIdentitySeparatesAuthorMergerAndSigner(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pull := pullResponse{MergeCommitSHA: strings.Repeat("c", 40), Base: apiRef{SHA: strings.Repeat("a", 40)}, Head: apiRef{SHA: strings.Repeat("b", 40)}}
+	integrationSHA := strings.Repeat("c", 40)
+	pull := pullResponse{MergeCommitSHA: strings.Repeat("e", 40), Base: apiRef{SHA: strings.Repeat("a", 40)}, Head: apiRef{SHA: strings.Repeat("b", 40)}}
 	canonical := commitResponse{
-		SHA:       pull.MergeCommitSHA,
+		SHA:       integrationSHA,
 		Author:    apiActor{Login: contract.OwnerLogin, ID: contract.OwnerDatabaseID, NodeID: contract.OwnerNodeID, Type: "User"},
 		Committer: apiActor{Login: contract.IntegrationSignerLogin, ID: contract.IntegrationSignerDatabaseID, NodeID: contract.IntegrationSignerNodeID, Type: "User"},
 		Parents:   []apiRef{{SHA: pull.Base.SHA}, {SHA: pull.Head.SHA}},
@@ -504,8 +527,8 @@ func TestIntegrationCandidateSelectionIsUniqueAndGraphBound(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if pull.Number != 13 || graph.Data.Repository.Pull.MergeCommit.OID != request.CommitSHA || pull.MergeCommitSHA != request.CommitSHA {
-					t.Fatal("selected relation was not normalized to the exact integration")
+				if pull.Number != 13 || graph.Data.Repository.Pull.MergeCommit.OID != request.CommitSHA || pull.MergeCommitSHA != strings.Repeat("e", 40) {
+					t.Fatal("selected relation did not preserve stateful REST evidence beside the exact graph")
 				}
 				return
 			}
