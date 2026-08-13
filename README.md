@@ -14,6 +14,11 @@ The optional `observability` package derives provider-neutral lifecycle events
 from those authoritative work units and delivers them through redaction-aware
 sinks. It never replaces Task results or Goal journals.
 
+Repository governance is declared by the versioned
+[`governance/main-v1alpha1.json`](governance/main-v1alpha1.json) contract and
+validated by `go run ./cmd/check-governance-contract`. See
+[`docs/repository-governance-v1alpha1.md`](docs/repository-governance-v1alpha1.md).
+
 The initial release focuses on the boundary between a control plane and an
 already-installed agent client. It does not implement a model provider, tool
 protocol, scheduler, or operating-system sandbox.

@@ -1,0 +1,36 @@
+{
+  "repository": {
+    "owner": "NDDev-it-com",
+    "name": "agent-runtime",
+    "default_branch": "main",
+    "allow_auto_merge": true
+  },
+  "rulesets": [
+    {
+      "source_type": "Repository",
+      "source": "NDDev-it-com/agent-runtime",
+      "name": "agent-runtime: protect main",
+      "target": "branch",
+      "enforcement": "active",
+      "bypass_actors": [
+        {
+          "actor_id": 5,
+          "actor_type": "RepositoryRole",
+          "bypass_mode": "always"
+        }
+      ],
+      "conditions": {
+        "ref_name": {
+          "include": [
+            "~DEFAULT_BRANCH"
+          ],
+          "exclude": []
+        }
+      },
+      "rules": []
+    }
+  ],
+  "available_checks": [],
+  "workflows": [],
+  "effective_rules": []
+}

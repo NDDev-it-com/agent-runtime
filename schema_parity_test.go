@@ -18,10 +18,14 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	t.Parallel()
 	task := readSchema(t, "schemas/task-manifest-v1alpha1.schema.json")
 	goal := readSchema(t, "schemas/goal-journal-v1alpha1.schema.json")
-	for name, schema := range map[string]map[string]any{"task": task, "goal": goal} {
+	governance := readSchema(t, "schemas/repository-governance-v1alpha1.schema.json")
+	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance} {
 		if schema["x-license"] != "AGPL-3.0-only" {
 			t.Errorf("%s schema license=%v", name, schema["x-license"])
 		}
+	}
+	if governance["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != "v1alpha1" {
+		t.Fatal("repository governance schema version drift")
 	}
 	if task["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != TaskSchemaVersion {
 		t.Fatal("Task schema version drift")

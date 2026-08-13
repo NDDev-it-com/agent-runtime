@@ -1,0 +1,49 @@
+{
+  "schema_version": "v1alpha1",
+  "repository": {
+    "owner": "NDDev-it-com",
+    "name": "agent-runtime",
+    "default_branch": "main",
+    "allow_auto_merge": true
+  },
+  "policy": {
+    "name": "agent-runtime: protect main",
+    "enforcement": "active",
+    "target": "branch",
+    "include": ["~DEFAULT_BRANCH"],
+    "exclude": [],
+    "bypass_actors": [],
+    "strict": true,
+    "require_pull_request": true,
+    "required_approvals": 0,
+    "require_code_owner_review": false,
+    "require_last_push_approval": false,
+    "require_review_thread_resolution": false,
+    "allowed_merge_methods": ["merge", "squash", "rebase"],
+    "require_merge_queue": false,
+    "required_deployments": []
+  },
+  "required_effective_rules": ["deletion", "non_fast_forward", "required_signatures"],
+  "required_checks": [
+    {
+      "context": "test (ubuntu-latest)",
+      "integration_id": 15368,
+      "producer": {"kind": "workflow", "path": ".github/workflows/ci.yml", "job": "test", "matrix_os": "ubuntu-latest"}
+    },
+    {
+      "context": "test (macos-latest)",
+      "integration_id": 15368,
+      "producer": {"kind": "workflow", "path": ".github/workflows/ci.yml", "job": "test", "matrix_os": "macos-latest"}
+    },
+    {
+      "context": "govulncheck",
+      "integration_id": 15368,
+      "producer": {"kind": "workflow", "path": ".github/workflows/ci.yml", "job": "govulncheck"}
+    },
+    {
+      "context": "Analyze (go)",
+      "integration_id": 15368,
+      "producer": {"kind": "github_managed_codeql", "workflow_id": 333214507}
+    }
+  ]
+}

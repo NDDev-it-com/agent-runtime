@@ -15,8 +15,6 @@ accepted problem statement and security analysis is required before work begins.
 - Reference isolation profiles for containers and microVMs.
 - Reproducible release artifacts and provenance attestations.
 - Windows journal locking and atomic durability semantics.
-- Required branch-check rules that hold auto-merge until CI and CodeQL finish;
-  PR #1 showed that auto-merge intent alone does not provide this gate.
 
 Requests should be filed with the feature-request issue form. The v0 runtime
 will remain intentionally small while these contracts are evaluated.
