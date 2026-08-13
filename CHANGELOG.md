@@ -8,6 +8,9 @@ contract.
 
 ### Added
 
+- Versioned, fail-closed repository governance contract and validator for
+  PR-only main changes, strict exact CI/CodeQL checks, zero approvals, and
+  auto-merge-compatible settings.
 - Provider-neutral immutable `v1alpha1` lifecycle envelopes for Task, Goal, and
   Brain/Orchestrator/Dispatcher/Worker handoff observations.
 - Fail-closed typed redaction with nested structure, cycle, formatter, unsafe

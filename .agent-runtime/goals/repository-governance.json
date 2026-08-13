@@ -1,0 +1,135 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 8,
+  "goal": {
+    "id": "repository-governance",
+    "intent": "Make agent-runtime main governance fail closed on PR-only changes and exact CI/CodeQL checks while preserving zero-approval agent workflows and auto-merge",
+    "acceptance": [
+      {
+        "id": "canonical-contract",
+        "acceptance": "One versioned source of truth defines desired repository governance and exact check identities",
+        "status": "pending"
+      },
+      {
+        "id": "validator",
+        "acceptance": "Validator rejects absent renamed ambiguous wrong-app or disabled governance and workflow trigger gaps",
+        "status": "pending"
+      },
+      {
+        "id": "agent-friendly",
+        "acceptance": "Zero human approvals, no thread/environment gates or merge queue, and auto-merge remains usable",
+        "status": "pending"
+      },
+      {
+        "id": "verification",
+        "acceptance": "Focused/full/race/fuzz/vet/format/schema/docs/security/governance and exact-head CI/CodeQL are green",
+        "status": "pending"
+      },
+      {
+        "id": "live-settings",
+        "acceptance": "Repository main ruleset matches the merged contract with proven readback and rollback evidence",
+        "status": "pending"
+      },
+      {
+        "id": "closure",
+        "acceptance": "Issue #4 closes only on clean synchronized terminal main with post-main evidence",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Modify organization rulesets, credentials, secrets, environments, apps, teams or other repositories",
+      "Change observability, Task, Goal or runtime product semantics",
+      "Create a merge queue, human approval gate, release, tag or version"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Asked what may have been forgotten: checked effective inherited signatures/no-force-push/deletion, classic protection absence, organization bypass ownership, merge methods, auto-merge, update-branch, merge queue, approvals, review threads, deployments, CodeQL dynamic identity, PR/push trigger gaps, path filters, duplicate contexts/rulesets, schema/docs/license, rollback and settings authorization timing. Staticcheck is unavailable and not a native gate; no settings have changed.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "repository diff/global terminology/TODO and governance surface audit",
+            "result": "No product changes, unowned settings, hidden human blockers, stale governance vocabulary or omitted required checks found."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:32:49.413854Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Implemented governance contract/schema/docs/CLI/internal validator, canonical ruleset compiler, workflow coverage verification, normalized live-state comparison, positive and fail-closed negative fixtures, fuzz target and CI invocation. Runtime and observability product semantics are untouched.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "go test ./...; go test -race ./... -count=3; governance fuzz",
+            "result": "All implementation and regression suites pass locally."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:32:49.144389Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Chosen boundary is one v1alpha1 contract compiled to a repository ruleset plus a validator for contract semantics, CI triggers/jobs and normalized API snapshots. It layers with but does not duplicate or edit organization governance. Settings write is deferred until contract merge and post-main green.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "governance/main-v1alpha1.json",
+            "result": "Canonical policy requires PR-only strict exact checks, zero approvals/no human gates, no bypass/deployments/merge queue, all merge methods and auto-merge."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:32:49.06284Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Read-only audit accepted exact terminal main 080183c; inspected issue #4, clean worktree, successful PR/main workflow runs and check app identities, active inherited organization rules, absent branch protection, repository merge settings, sibling governance patterns and current official GitHub ruleset/status/CodeQL/auto-merge documentation.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/4#issuecomment-5275559998",
+            "result": "Authoritative done/remaining/check-identity/boundary audit recorded before branch or settings mutation."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:32:48.980914Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "Reconciled issue acceptance, observed check contexts/app 15368, CI workflow names/matrix/triggers, dynamic CodeQL workflow 333214507, repository merge methods, inherited effective signature/non-fast-forward/deletion rules, docs/schema/CLI vocabulary and sibling source-of-truth pattern.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "gh API rules/check-runs/workflows/repository audit; contract validator",
+            "result": "Exact identities and layered ownership agree; no guessed context or foreign ownership edit."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:32:49.232091Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "Reviewed architecture, validator fail-closed behavior, strict JSON decoding, API normalization boundary, check/app ambiguity, workflow trigger coverage, settings rollback, zero-human workflow, public docs/schema, naming and maintainability. Contract state is immutable input and desired ruleset is deterministically derived.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/governance positive and negative contract/snapshot/workflow suites",
+            "result": "Missing/renamed/wrong-app/ambiguous checks, disabled/evaluate enforcement, bypass, strictness, approvals, CodeQL state, paths and settings drift are rejected."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:32:49.324307Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "Local product and release evidence is green: focused governance suite, full tests, full race three repetitions, governance and existing fuzz targets, vet, gofmt/diff, JSON/schema/docs parity, CI toolchain contract, governance CLI and pinned govulncheck v1.6.0. Remote exact-head and post-main checks remain required before settings.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local verification 2026-08-13",
+            "result": "All applicable local gates green; no product/test failure occurred in Attempt1."
+          }
+        ],
+        "recorded_at": "2026-08-13T03:32:49.512321Z"
+      }
+    },
+    "created_at": "2026-08-13T03:22:37.828719Z",
+    "updated_at": "2026-08-13T03:32:49.512321Z"
+  }
+}
