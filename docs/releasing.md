@@ -47,6 +47,11 @@ covers every other asset and deliberately does not checksum itself.
    GitHub Actions app database/node identities. Display names and commit author
    strings are never trust inputs; PR number, base/head/tree/parent order and
    pre-merge check runs remain bound to the exact integration commit.
+   REST commit associations discover a bounded candidate set only. Exactly one
+   candidate must independently match GitHub's GraphQL merged-PR commit, tree
+   and ordered-parent relation plus the REST/local signed commit; stateful REST
+   test-merge SHAs are never used as final integration authority. Missing,
+   duplicate, ambiguous, indirect, squash and rebase relations fail closed.
    Integration verification is native Go on Linux and macOS. Its sole provider
    public key, fingerprint, byte digest, active status and reviewed-change-only
    rotation/revocation policy live in `provenance/v1alpha1.json`; it uses no
@@ -62,6 +67,10 @@ covers every other asset and deliberately does not checksum itself.
 6. Run full tests, race, fuzz seeds, vet, formatting, CI/security/governance
    contracts and pinned `govulncheck` under the exact patched Go 1.26.5
    security lane. The module declaration and test/release lanes remain Go 1.24.
+   Run `go run ./cmd/check-fuzz` for the active fuzzing gate. It inventories
+   every repository fuzz target and runs each exact package/target separately
+   with the versioned bounds in `fuzz/v1alpha1.json`; direct multi-package
+   `go test -fuzz` commands are not valid or accepted.
    Go 1.26.5 is the first 1.26 patch fixing
    [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856); the dependency closure
    pins CIRCL v1.6.3, whose

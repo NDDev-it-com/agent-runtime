@@ -23,7 +23,8 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	releaseContract := readSchema(t, "schemas/release-contract-v1alpha1.schema.json")
 	releaseManifest := readSchema(t, "schemas/release-manifest-v1alpha1.schema.json")
 	provenance := readSchema(t, "schemas/provenance-contract-v1alpha1.schema.json")
-	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance, "release contract": releaseContract, "release manifest": releaseManifest, "provenance": provenance} {
+	fuzz := readSchema(t, "schemas/fuzz-contract-v1alpha1.schema.json")
+	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance, "release contract": releaseContract, "release manifest": releaseManifest, "provenance": provenance, "fuzz": fuzz} {
 		if schema["x-license"] != "AGPL-3.0-only" {
 			t.Errorf("%s schema license=%v", name, schema["x-license"])
 		}
@@ -36,6 +37,9 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	}
 	if provenance["properties"].(map[string]any)["integration_openpgp_status"].(map[string]any)["const"] != "active" || provenance["properties"].(map[string]any)["trust_update_policy"].(map[string]any)["const"] != "reviewed-contract-change" {
 		t.Fatal("provenance trust policy schema drift")
+	}
+	if fuzz["properties"].(map[string]any)["fuzztime"].(map[string]any)["const"] != "100x" || fuzz["properties"].(map[string]any)["parallel"].(map[string]any)["const"] != float64(1) {
+		t.Fatal("fuzz execution bounds schema drift")
 	}
 	release, err := releasepkg.Load("release/v1alpha1.json")
 	if err != nil {

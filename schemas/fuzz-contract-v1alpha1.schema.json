@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-it-com/agent-runtime/schemas/fuzz-contract-v1alpha1.schema.json",
+  "x-license": "AGPL-3.0-only",
+  "title": "agent-runtime fuzz contract v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "fuzztime", "fuzzminimizetime", "parallel", "timeout", "max_corpus_files_per_target", "max_corpus_bytes_per_target", "targets"],
+  "properties": {
+    "schema_version": {"const": "v1alpha1"},
+    "fuzztime": {"const": "100x"},
+    "fuzzminimizetime": {"const": "10x"},
+    "parallel": {"const": 1},
+    "timeout": {"const": "2m"},
+    "max_corpus_files_per_target": {"const": 256},
+    "max_corpus_bytes_per_target": {"const": 1048576},
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["package", "name"],
+        "properties": {
+          "package": {"type": "string", "pattern": "^github\\.com/NDDev-it-com/agent-runtime(?:/[A-Za-z0-9_.-]+)*$"},
+          "name": {"type": "string", "pattern": "^Fuzz[A-Z][A-Za-z0-9_]*$"}
+        }
+      }
+    }
+  }
+}

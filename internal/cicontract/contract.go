@@ -70,6 +70,9 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	if !strings.Contains(text, "GOTOOLCHAIN: local") {
 		return errors.New("workflow must set GOTOOLCHAIN: local")
 	}
+	if strings.Count(text, "go run ./cmd/check-fuzz") != 1 {
+		return errors.New("workflow must invoke the canonical fuzz verifier exactly once")
+	}
 	return nil
 }
 func jobGoVersion(workflow, job string) (string, error) {

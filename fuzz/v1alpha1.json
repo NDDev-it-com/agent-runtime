@@ -1,0 +1,17 @@
+{
+  "schema_version": "v1alpha1",
+  "fuzztime": "100x",
+  "fuzzminimizetime": "10x",
+  "parallel": 1,
+  "timeout": "2m",
+  "max_corpus_files_per_target": 256,
+  "max_corpus_bytes_per_target": 1048576,
+  "targets": [
+    {"package": "github.com/NDDev-it-com/agent-runtime", "name": "FuzzDecodeTaskManifest"},
+    {"package": "github.com/NDDev-it-com/agent-runtime/internal/governance", "name": "FuzzGovernanceContractDecode"},
+    {"package": "github.com/NDDev-it-com/agent-runtime/internal/releasecontract", "name": "FuzzReleaseContractJSON"},
+    {"package": "github.com/NDDev-it-com/agent-runtime/internal/releasecontract", "name": "FuzzReleasePath"},
+    {"package": "github.com/NDDev-it-com/agent-runtime/observability", "name": "FuzzEnvelopeUnmarshal"},
+    {"package": "github.com/NDDev-it-com/agent-runtime/observability", "name": "FuzzRedactionNeverLeaksDeniedValue"}
+  ]
+}

@@ -186,6 +186,7 @@ reason/count pairs.
 
 ```sh
 go test -race ./...
+go run ./cmd/check-fuzz
 go vet ./...
 go build ./cmd/agent-runtime
 ```

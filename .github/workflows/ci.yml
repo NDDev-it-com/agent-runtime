@@ -30,6 +30,8 @@ jobs:
           cache: false
       - run: go test -race ./...
       - run: go vet ./...
+      - name: Run every contracted fuzz target independently
+        run: go run ./cmd/check-fuzz
       - run: go build ./cmd/agent-runtime
       - name: Cold-compile every supported platform variant
         run: go run ./cmd/check-cold-compile
