@@ -36,6 +36,11 @@ contract.
   failure tests.
 - Deterministic source/module release contract with SPDX JSON, checksums,
   machine-readable manifest, signed tags and keyless artifact attestations.
+- Hermetic three-role provenance verification for owner SSH source commits,
+  GitHub OpenPGP integration commits and owner SSH release tags, with pinned
+  reviewed public trust and exact PR/check graph binding.
+- Patched Go 1.26.5 security scanning and CIRCL v1.6.3 dependency closure while
+  retaining Go 1.24 module, test and release compatibility.
 
 ### Changed
 

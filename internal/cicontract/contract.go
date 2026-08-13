@@ -17,6 +17,7 @@ type Contract struct {
 	SchemaVersion   string `json:"schema_version"`
 	License         string `json:"license"`
 	Govulncheck     Tool   `json:"govulncheck"`
+	SecurityGo      string `json:"security_go"`
 	CompatibilityGo string `json:"compatibility_go"`
 }
 type Tool struct {
@@ -37,7 +38,7 @@ func Load(path string) (Contract, error) {
 	if err := decoder.Decode(&c); err != nil {
 		return Contract{}, fmt.Errorf("decode contract: %w", err)
 	}
-	if c.SchemaVersion != "v1alpha1" || c.License != "AGPL-3.0-only" || c.Govulncheck.Module == "" || c.Govulncheck.Version == "" || c.Govulncheck.MinimumGo == "" || c.Govulncheck.UpstreamGoMod == "" || c.CompatibilityGo == "" {
+	if c.SchemaVersion != "v1alpha1" || c.License != "AGPL-3.0-only" || c.Govulncheck.Module == "" || c.Govulncheck.Version == "" || c.Govulncheck.MinimumGo == "" || c.Govulncheck.UpstreamGoMod == "" || c.SecurityGo == "" || c.CompatibilityGo == "" {
 		return Contract{}, errors.New("contract has missing or unsupported fields")
 	}
 	return c, nil
@@ -58,6 +59,9 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	}
 	if compareGo(scannerVersion, c.Govulncheck.MinimumGo) < 0 {
 		return fmt.Errorf("govulncheck job Go %s is below tool minimum %s", scannerVersion, c.Govulncheck.MinimumGo)
+	}
+	if scannerVersion != c.SecurityGo {
+		return fmt.Errorf("govulncheck job Go %s differs from patched security Go %s", scannerVersion, c.SecurityGo)
 	}
 	pin := c.Govulncheck.Module + "@" + c.Govulncheck.Version
 	if strings.Count(text, pin) != 3 {

@@ -17,6 +17,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/mod/module"
 )
 
 type gitFile struct {
@@ -360,9 +362,13 @@ func newMainSPDXPackage(c Contract) spdxPackage {
 }
 
 func newDependencySPDXPackage(dependency Dependency, index int) spdxPackage {
+	escapedPath, err := module.EscapePath(dependency.ModulePath)
+	if err != nil {
+		escapedPath = "invalid-module-path"
+	}
 	return spdxPackage{
 		Name: dependency.ModulePath, SPDXID: fmt.Sprintf("SPDXRef-Dependency-%d", index+1), VersionInfo: dependency.Version,
-		DownloadLocation: "https://proxy.golang.org/" + dependency.ModulePath + "/@v/" + dependency.Version + ".zip",
+		DownloadLocation: "https://proxy.golang.org/" + escapedPath + "/@v/" + dependency.Version + ".zip",
 		FilesAnalyzed:    false, LicenseConcluded: dependency.License, LicenseDeclared: dependency.License,
 		CopyrightText: "NOASSERTION", ExternalRefs: []externalRef{newPURL(dependency.ModulePath, dependency.Version)},
 	}
