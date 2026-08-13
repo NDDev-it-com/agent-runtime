@@ -1,18 +1,25 @@
 {
   "schema_version": "v1alpha1",
   "repository": "NDDev-it-com/agent-runtime",
+  "repository_database_id": 1332584050,
+  "repository_node_id": "R_kgDOT22ecg",
   "owner_login": "rldyourmnd",
+  "owner_database_id": 102828838,
+  "owner_node_id": "U_kgDOBiELJg",
   "owner_ssh_allowed_signers": ".github/release-allowed-signers",
   "integration_openpgp_key": ".github/github-web-flow.asc",
   "integration_openpgp_fingerprint": "968479A1AFF927E37D1A566BB5690EEEBB952194",
   "integration_openpgp_sha256": "40ce89d21fb075092d256f9fbf62a1c19299d3282cb913d3e61d08235d0c491a",
   "integration_openpgp_status": "active",
+  "integration_signer_login": "web-flow",
+  "integration_signer_database_id": 19864447,
+  "integration_signer_node_id": "MDQ6VXNlcjE5ODY0NDQ3",
   "trust_update_policy": "reviewed-contract-change",
   "merge_method": "merge",
   "required_checks": [
-    {"context": "Analyze (go)", "app_id": 15368, "workflow_id": 333214507, "event": "dynamic"},
-    {"context": "govulncheck", "app_id": 15368, "workflow_id": 333214464, "event": "pull_request"},
-    {"context": "test (macos-latest)", "app_id": 15368, "workflow_id": 333214464, "event": "pull_request"},
-    {"context": "test (ubuntu-latest)", "app_id": 15368, "workflow_id": 333214464, "event": "pull_request"}
+    {"context": "Analyze (go)", "app_id": 15368, "app_node_id": "MDM6QXBwMTUzNjg=", "app_slug": "github-actions", "workflow_id": 333214507, "event": "dynamic"},
+    {"context": "govulncheck", "app_id": 15368, "app_node_id": "MDM6QXBwMTUzNjg=", "app_slug": "github-actions", "workflow_id": 333214464, "event": "pull_request"},
+    {"context": "test (macos-latest)", "app_id": 15368, "app_node_id": "MDM6QXBwMTUzNjg=", "app_slug": "github-actions", "workflow_id": 333214464, "event": "pull_request"},
+    {"context": "test (ubuntu-latest)", "app_id": 15368, "app_node_id": "MDM6QXBwMTUzNjg=", "app_slug": "github-actions", "workflow_id": 333214464, "event": "pull_request"}
   ]
 }

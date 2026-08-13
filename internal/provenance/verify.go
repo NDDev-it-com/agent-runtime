@@ -50,6 +50,7 @@ type Result struct {
 	PullRequest    int
 	SourceCommits  []string
 	CheckRuns      map[string]int64
+	CheckSuites    map[string]int64
 }
 
 type githubClient struct {
@@ -58,29 +59,43 @@ type githubClient struct {
 }
 
 type pullResponse struct {
+	ID             int64     `json:"id"`
+	NodeID         string    `json:"node_id"`
 	Number         int       `json:"number"`
 	State          string    `json:"state"`
 	Merged         bool      `json:"merged"`
 	MergeCommitSHA string    `json:"merge_commit_sha"`
 	MergedAt       time.Time `json:"merged_at"`
-	MergedBy       apiLogin  `json:"merged_by"`
+	MergedBy       apiActor  `json:"merged_by"`
 	Base           apiRef    `json:"base"`
 	Head           apiRef    `json:"head"`
 	Commits        int       `json:"commits"`
 }
-type apiLogin struct {
-	Login string `json:"login"`
+type apiActor struct {
+	Login  string `json:"login"`
+	ID     int64  `json:"id"`
+	NodeID string `json:"node_id"`
+	Type   string `json:"type"`
 }
 type apiRef struct {
-	SHA string `json:"sha"`
+	Ref        string        `json:"ref"`
+	SHA        string        `json:"sha"`
+	Repository apiRepository `json:"repo"`
+}
+type apiRepository struct {
+	ID     int64  `json:"id"`
+	NodeID string `json:"node_id"`
 }
 type apiCommitListItem struct {
 	SHA string `json:"sha"`
 }
 type commitResponse struct {
-	SHA     string      `json:"sha"`
-	Parents []apiRef    `json:"parents"`
-	Commit  commitBlock `json:"commit"`
+	SHA       string      `json:"sha"`
+	NodeID    string      `json:"node_id"`
+	Author    apiActor    `json:"author"`
+	Committer apiActor    `json:"committer"`
+	Parents   []apiRef    `json:"parents"`
+	Commit    commitBlock `json:"commit"`
 }
 type commitBlock struct {
 	Tree         apiRef          `json:"tree"`
@@ -105,8 +120,13 @@ type checkRun struct {
 	Conclusion string `json:"conclusion"`
 	DetailsURL string `json:"details_url"`
 	App        struct {
-		ID int64 `json:"id"`
+		ID     int64  `json:"id"`
+		NodeID string `json:"node_id"`
+		Slug   string `json:"slug"`
 	} `json:"app"`
+	CheckSuite struct {
+		ID int64 `json:"id"`
+	} `json:"check_suite"`
 	CompletedAt time.Time `json:"completed_at"`
 }
 type workflowRun struct {
@@ -164,8 +184,8 @@ func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, erro
 	if err := client.get(ctx, fmt.Sprintf("/repos/%s/pulls/%d", client.repository, request.PullRequest), &pull); err != nil {
 		return Result{}, err
 	}
-	if !pull.Merged || pull.State != "closed" || pull.Number != request.PullRequest || pull.MergeCommitSHA != request.CommitSHA || pull.MergedBy.Login != request.Contract.OwnerLogin || !fullSHA.MatchString(pull.Base.SHA) || !fullSHA.MatchString(pull.Head.SHA) || pull.Commits < 1 || pull.Commits > 64 {
-		return Result{}, errors.New("PR merge identity, actor, state, commit, or source bound is invalid")
+	if err := validatePullIdentity(request.Contract, request, pull); err != nil {
+		return Result{}, err
 	}
 	var integration commitResponse
 	if err := client.get(ctx, "/repos/"+client.repository+"/commits/"+request.CommitSHA, &integration); err != nil {
@@ -207,11 +227,11 @@ func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, erro
 	if sources[len(sources)-1] != pull.Head.SHA {
 		return Result{}, errors.New("PR source enumeration does not end at reviewed head")
 	}
-	checks, err := verifyChecks(ctx, client, request.Contract, pull.Head.SHA, pull.MergedAt)
+	checks, suites, err := verifyChecks(ctx, client, request.Contract, pull.Head.SHA, pull.MergedAt)
 	if err != nil {
 		return Result{}, err
 	}
-	return Result{IntegrationSHA: integration.SHA, BaseSHA: pull.Base.SHA, HeadSHA: pull.Head.SHA, TreeSHA: integration.Commit.Tree.SHA, PullRequest: pull.Number, SourceCommits: sources, CheckRuns: checks}, nil
+	return Result{IntegrationSHA: integration.SHA, BaseSHA: pull.Base.SHA, HeadSHA: pull.Head.SHA, TreeSHA: integration.Commit.Tree.SHA, PullRequest: pull.Number, SourceCommits: sources, CheckRuns: checks, CheckSuites: suites}, nil
 }
 
 func validateIntegrationIdentity(contract Contract, pull pullResponse, commit commitResponse) error {
@@ -221,50 +241,80 @@ func validateIntegrationIdentity(contract Contract, pull pullResponse, commit co
 	if commit.SHA != pull.MergeCommitSHA || len(commit.Parents) != 2 || commit.Parents[0].SHA != pull.Base.SHA || commit.Parents[1].SHA != pull.Head.SHA || !fullSHA.MatchString(commit.Commit.Tree.SHA) {
 		return errors.New("integration SHA, parent order, PR base/head, or tree identity differs")
 	}
+	if commit.Committer.Login != contract.IntegrationSignerLogin || commit.Committer.ID != contract.IntegrationSignerDatabaseID || commit.Committer.NodeID != contract.IntegrationSignerNodeID || commit.Committer.Type != "User" {
+		return errors.New("integration signer account identity differs from the pinned provider role")
+	}
 	return nil
 }
 
-func verifyChecks(ctx context.Context, client githubClient, contract Contract, head string, mergedAt time.Time) (map[string]int64, error) {
+func validatePullIdentity(contract Contract, request VerifyRequest, pull pullResponse) error {
+	checks := []struct {
+		valid bool
+		field string
+	}{
+		{pull.ID > 0 && pull.NodeID != "", "pull_request.id"},
+		{pull.Number == request.PullRequest, "pull_request.number"},
+		{pull.State == "closed" && pull.Merged, "pull_request.state"},
+		{!pull.MergedAt.IsZero(), "pull_request.merged_at"},
+		{pull.MergeCommitSHA == request.CommitSHA, "pull_request.merge_commit_sha"},
+		{pull.MergedBy.Login == contract.OwnerLogin && pull.MergedBy.ID == contract.OwnerDatabaseID && pull.MergedBy.NodeID == contract.OwnerNodeID && pull.MergedBy.Type == "User", "pull_request.merged_by"},
+		{pull.Base.Ref == "main" && fullSHA.MatchString(pull.Base.SHA), "pull_request.base"},
+		{pull.Head.Ref != "" && fullSHA.MatchString(pull.Head.SHA), "pull_request.head"},
+		{pull.Base.Repository.ID == contract.RepositoryDatabaseID && pull.Base.Repository.NodeID == contract.RepositoryNodeID, "pull_request.base.repository"},
+		{pull.Head.Repository.ID == contract.RepositoryDatabaseID && pull.Head.Repository.NodeID == contract.RepositoryNodeID, "pull_request.head.repository"},
+		{pull.Commits >= 1 && pull.Commits <= 64, "pull_request.commits"},
+	}
+	for _, check := range checks {
+		if !check.valid {
+			return fmt.Errorf("integration provenance field %s is invalid", check.field)
+		}
+	}
+	return nil
+}
+
+func verifyChecks(ctx context.Context, client githubClient, contract Contract, head string, mergedAt time.Time) (map[string]int64, map[string]int64, error) {
 	var response checksResponse
 	if err := client.get(ctx, "/repos/"+client.repository+"/commits/"+head+"/check-runs?per_page=100", &response); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if response.TotalCount != len(response.CheckRuns) || response.TotalCount > 100 {
-		return nil, errors.New("check-run enumeration is incomplete or exceeds the bounded page")
+		return nil, nil, errors.New("check-run enumeration is incomplete or exceeds the bounded page")
 	}
 	want := make(map[string]RequiredCheck, len(contract.RequiredChecks))
 	for _, check := range contract.RequiredChecks {
 		want[check.Context] = check
 	}
 	found := make(map[string]int64, len(want))
+	suites := make(map[string]int64, len(want))
 	for _, check := range response.CheckRuns {
 		required, ok := want[check.Name]
 		if !ok {
 			continue
 		}
 		if _, duplicate := found[check.Name]; duplicate {
-			return nil, fmt.Errorf("required check %q is ambiguous", check.Name)
+			return nil, nil, fmt.Errorf("required check %q is ambiguous", check.Name)
 		}
-		if check.HeadSHA != head || check.App.ID != required.AppID || check.Status != "completed" || check.Conclusion != "success" || check.CompletedAt.IsZero() || check.CompletedAt.After(mergedAt) {
-			return nil, fmt.Errorf("required check %q identity or result is invalid", check.Name)
+		if check.HeadSHA != head || check.App.ID != required.AppID || check.App.NodeID != required.AppNodeID || check.App.Slug != required.AppSlug || check.CheckSuite.ID < 1 || check.Status != "completed" || check.Conclusion != "success" || check.CompletedAt.IsZero() || check.CompletedAt.After(mergedAt) {
+			return nil, nil, fmt.Errorf("required check %q identity, suite, or result is invalid", check.Name)
 		}
 		runID, err := actionRunID(check.DetailsURL)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		var run workflowRun
 		if err := client.get(ctx, fmt.Sprintf("/repos/%s/actions/runs/%d", client.repository, runID), &run); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		if run.ID != runID || run.RunAttempt != 1 || run.HeadSHA != head || run.WorkflowID != required.WorkflowID || run.Event != required.Event || run.Status != "completed" || run.Conclusion != "success" || run.UpdatedAt.IsZero() || run.UpdatedAt.After(mergedAt) {
-			return nil, fmt.Errorf("required check %q workflow run is stale, rerun, or substituted", check.Name)
+			return nil, nil, fmt.Errorf("required check %q workflow run is stale, rerun, or substituted", check.Name)
 		}
 		found[check.Name] = check.ID
+		suites[check.Name] = check.CheckSuite.ID
 	}
 	if len(found) != len(want) || mergedAt.IsZero() {
-		return nil, errors.New("required exact-head check evidence is incomplete")
+		return nil, nil, errors.New("required exact-head check evidence is incomplete")
 	}
-	return found, nil
+	return found, suites, nil
 }
 
 func actionRunID(details string) (int64, error) {
