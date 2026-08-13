@@ -11,9 +11,7 @@ accepted problem statement and security analysis is required before work begins.
   ([issue #3](https://github.com/NDDev-it-com/agent-runtime/issues/3)).
 - Explicit process-tree termination semantics per supported platform.
 - Optional adapters for established tool and model protocols.
-- Signed manifest/provenance verification at the control-plane boundary.
 - Reference isolation profiles for containers and microVMs.
-- Reproducible release artifacts and provenance attestations.
 - Windows journal locking and atomic durability semantics.
 
 Requests should be filed with the feature-request issue form. The v0 runtime

@@ -48,6 +48,7 @@ jobs:
           tag_commit="$(git rev-parse "$RELEASE_TAG^{commit}")"
           tag_object="$(git rev-parse "$RELEASE_TAG^{tag}")"
           go run ./cmd/check-signature --tag "$tag_object" --expected-commit "$tag_commit"
+          go run ./cmd/check-provenance --integration "$tag_commit"
           test "$tag_commit" = "$(git rev-parse HEAD)"
           git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
           test "$tag_commit" = "$(git rev-parse refs/remotes/origin/main)"

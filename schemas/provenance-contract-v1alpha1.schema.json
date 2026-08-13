@@ -1,0 +1,34 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-it-com/agent-runtime/schemas/provenance-contract-v1alpha1.schema.json",
+  "x-license": "AGPL-3.0-only",
+  "title": "agent-runtime provenance contract v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "repository", "owner_login", "owner_ssh_allowed_signers", "integration_openpgp_key", "integration_openpgp_fingerprint", "integration_openpgp_sha256", "integration_openpgp_status", "trust_update_policy", "merge_method", "required_checks"],
+  "properties": {
+    "schema_version": {"const": "v1alpha1"},
+    "repository": {"const": "NDDev-it-com/agent-runtime"},
+    "owner_login": {"const": "rldyourmnd"},
+    "owner_ssh_allowed_signers": {"const": ".github/release-allowed-signers"},
+    "integration_openpgp_key": {"const": ".github/github-web-flow.asc"},
+    "integration_openpgp_fingerprint": {"const": "968479A1AFF927E37D1A566BB5690EEEBB952194"},
+    "integration_openpgp_sha256": {"const": "40ce89d21fb075092d256f9fbf62a1c19299d3282cb913d3e61d08235d0c491a"},
+    "integration_openpgp_status": {"const": "active"},
+    "trust_update_policy": {"const": "reviewed-contract-change"},
+    "merge_method": {"const": "merge"},
+    "required_checks": {
+      "type": "array", "minItems": 4, "maxItems": 4,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["context", "app_id", "workflow_id", "event"],
+        "properties": {
+          "context": {"enum": ["Analyze (go)", "govulncheck", "test (macos-latest)", "test (ubuntu-latest)"]},
+          "app_id": {"const": 15368},
+          "workflow_id": {"type": "integer", "minimum": 1},
+          "event": {"enum": ["dynamic", "pull_request"]}
+        }
+      }
+    }
+  }
+}

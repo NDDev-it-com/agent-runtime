@@ -87,6 +87,11 @@ SPDX 2.3 JSON SBOM, canonical release notes, a release manifest, and
 `SHA256SUMS`. The annotated signed tag identifies the exact `main` commit;
 GitHub OIDC/Sigstore attestations cover every material asset. See
 [`docs/releasing.md`](docs/releasing.md) for verification and rollback rules.
+The repository-owned [provenance contract](provenance/v1alpha1.json) separates
+owner SSH-signed source commits, GitHub OpenPGP-signed protected-main merge
+commits, and owner SSH-signed release tags. Its native verifier pins reviewed
+public trust bytes and exact PR, graph, workflow and check identities on both
+Linux and macOS without ambient GPG or Git trust configuration.
 
 ## Goal contract
 

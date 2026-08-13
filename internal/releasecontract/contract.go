@@ -19,6 +19,7 @@ import (
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
+	"github.com/NDDev-it-com/agent-runtime/internal/provenance"
 	"github.com/NDDev-it-com/agent-runtime/internal/signatureverify"
 )
 
@@ -71,6 +72,7 @@ type Dependency struct {
 	ModulePath string `json:"module_path"`
 	Version    string `json:"version"`
 	License    string `json:"license"`
+	Indirect   bool   `json:"indirect,omitempty"`
 }
 
 func Load(path string) (Contract, error) {
@@ -104,15 +106,24 @@ func (c Contract) Validate() error {
 	if c.ModulePath != "github.com/NDDev-it-com/agent-runtime" || c.GoCompatibility != "1.24" || c.License != "AGPL-3.0-only" {
 		return errors.New("module path, Go 1.24 compatibility, and AGPL license are canonical")
 	}
-	wantDependencies := []Dependency{
-		{ModulePath: "golang.org/x/mod", Version: "v0.27.0", License: "BSD-3-Clause"},
-		{ModulePath: "golang.org/x/sys", Version: "v0.40.0", License: "BSD-3-Clause"},
+	if len(c.Dependencies) == 0 || len(c.Dependencies) > 64 {
+		return errors.New("release dependency closure is empty or unbounded")
 	}
-	if !equalDependencies(c.Dependencies, wantDependencies) {
-		return errors.New("release dependency contract must exactly match go.mod")
+	seenDependencies := make(map[string]struct{}, len(c.Dependencies))
+	for _, dependency := range c.Dependencies {
+		if module.CheckPath(dependency.ModulePath) != nil || module.CanonicalVersion(dependency.Version) != dependency.Version || dependency.License != "BSD-3-Clause" {
+			return errors.New("release dependency identity, version, or license is invalid")
+		}
+		if _, duplicate := seenDependencies[dependency.ModulePath]; duplicate {
+			return errors.New("release dependency path is duplicated")
+		}
+		seenDependencies[dependency.ModulePath] = struct{}{}
 	}
 	if c.SourceCommit != "HEAD" || c.Workflow != ".github/workflows/release.yml" || c.AllowedSigners != ".github/release-allowed-signers" {
 		return errors.New("release source and workflow identity are invalid")
+	}
+	if !equalDependencies(c.Dependencies, canonicalDependencies(c.Dependencies)) {
+		return errors.New("release dependencies must use canonical module-path order")
 	}
 	wantPrefix := "agent-runtime-" + c.Version + "/"
 	if c.ArchivePrefix != wantPrefix {
@@ -206,16 +217,31 @@ func (c Contract) verifyGoMod(data []byte) error {
 	if parsed.Toolchain != nil || len(parsed.Replace) != 0 || len(parsed.Exclude) != 0 || len(parsed.Retract) != 0 || len(parsed.Tool) != 0 || len(parsed.Godebug) != 0 || len(parsed.Ignore) != 0 {
 		return errors.New("go.mod contains an uncontracted semantic directive")
 	}
-	if len(parsed.Require) != len(c.Dependencies) {
+	contractDependencies := make(map[string]Dependency, len(c.Dependencies))
+	for _, dependency := range c.Dependencies {
+		contractDependencies[dependency.ModulePath] = dependency
+	}
+	if len(parsed.Require) != len(contractDependencies) {
 		return errors.New("go.mod dependency closure differs from release contract")
 	}
-	for index, requirement := range parsed.Require {
-		dependency := c.Dependencies[index]
-		if requirement.Indirect || requirement.Mod.Path != dependency.ModulePath || requirement.Mod.Version != dependency.Version || module.CanonicalVersion(requirement.Mod.Version) != requirement.Mod.Version {
-			return errors.New("go.mod dependency identity/order differs from release contract")
+	actual := make([]Dependency, 0, len(parsed.Require))
+	for _, requirement := range parsed.Require {
+		dependency, ok := contractDependencies[requirement.Mod.Path]
+		if !ok || module.CanonicalVersion(requirement.Mod.Version) != requirement.Mod.Version {
+			return errors.New("go.mod dependency identity differs from release contract")
 		}
+		actual = append(actual, Dependency{ModulePath: requirement.Mod.Path, Version: requirement.Mod.Version, License: dependency.License, Indirect: requirement.Indirect})
+	}
+	if !equalDependencies(canonicalDependencies(actual), canonicalDependencies(c.Dependencies)) {
+		return errors.New("go.mod dependency closure differs from release contract")
 	}
 	return nil
+}
+
+func canonicalDependencies(dependencies []Dependency) []Dependency {
+	canonical := append([]Dependency(nil), dependencies...)
+	sort.Slice(canonical, func(i, j int) bool { return canonical[i].ModulePath < canonical[j].ModulePath })
+	return canonical
 }
 
 func sameGoCompatibility(actual, expected string) bool {
@@ -249,7 +275,7 @@ func (c Contract) VerifyWorkflow(data []byte) error {
 	s := string(data)
 	required := []string{
 		"tags: ['v*.*.*']", "if: github.run_attempt == 1", "contents: read", "contents: write", "id-token: write", "attestations: write", "artifact-metadata: write",
-		"go run ./cmd/check-release-contract", "go run ./cmd/check-cold-compile", "go run ./cmd/check-signature --tag", "--expected-commit", "verification.verified", "refs/heads/main", "gh release create", "--verify-tag", c.Actions.Checkout, c.Actions.SetupGo, c.Actions.AttestProvenance, c.Actions.AttestSBOM,
+		"go run ./cmd/check-release-contract", "go run ./cmd/check-cold-compile", "go run ./cmd/check-signature --tag", provenance.IntegrationCommand, "--expected-commit", "verification.verified", "refs/heads/main", "gh release create", "--verify-tag", c.Actions.Checkout, c.Actions.SetupGo, c.Actions.AttestProvenance, c.Actions.AttestSBOM,
 		"--expect-version",
 	}
 	for _, token := range required {
