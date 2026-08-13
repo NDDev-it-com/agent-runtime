@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-it-com/agent-runtime/schemas/lifecycle-event-v1alpha1.schema.json",
+  "title": "agent-runtime lifecycle event v1alpha1",
+  "x-license": "AGPL-3.0-only",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "event_id", "kind", "subject", "correlation_id", "sequence", "timestamp", "actor", "runtime", "attempt", "outcome", "payload", "attributes", "redactions"],
+  "properties": {
+    "schema_version": { "const": "v1alpha1" },
+    "event_id": { "type": "string", "pattern": "^evt_[0-9a-f]{32}$" },
+    "kind": { "enum": ["task.validated", "task.started", "task.completed", "task.failed", "task.blocked", "goal.created", "goal.checklist_added", "goal.checklist_completed", "goal.receipt_evidence_added", "goal.phase_transitioned", "goal.completed", "goal.blocked", "handoff.dispatched", "handoff.accepted", "handoff.completed", "handoff.failed", "handoff.blocked"] },
+    "subject": { "$ref": "#/$defs/subject" },
+    "correlation_id": { "$ref": "#/$defs/stableId" },
+    "causation_id": { "type": "string", "pattern": "^evt_[0-9a-f]{32}$" },
+    "sequence": { "type": "integer", "minimum": 1 },
+    "timestamp": { "type": "string", "format": "date-time" },
+    "actor": { "$ref": "#/$defs/actor" },
+    "runtime": { "$ref": "#/$defs/runtime" },
+    "attempt": { "enum": ["initial", "retry", "recovery", "replay"] },
+    "outcome": { "enum": ["observed", "started", "succeeded", "failed", "blocked", "cancelled"] },
+    "payload": { "$ref": "#/$defs/payload" },
+    "attributes": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/attribute" } },
+    "redactions": { "type": "array", "items": { "$ref": "#/$defs/redaction" } }
+  },
+  "$defs": {
+    "stableId": { "type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$" },
+    "subject": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "id"],
+      "properties": { "kind": { "enum": ["task", "goal", "handoff"] }, "id": { "$ref": "#/$defs/stableId" }, "revision": { "type": "integer", "minimum": 1 } },
+      "allOf": [
+        { "if": { "properties": { "kind": { "const": "goal" } } }, "then": { "required": ["revision"] } },
+        { "if": { "properties": { "kind": { "enum": ["task", "handoff"] } } }, "then": { "not": { "required": ["revision"] } } }
+      ]
+    },
+    "actor": { "type": "object", "additionalProperties": false, "required": ["kind", "id"], "properties": { "kind": { "enum": ["brain", "orchestrator", "dispatcher", "worker", "runtime"] }, "id": { "$ref": "#/$defs/stableId" } } },
+    "runtime": { "type": "object", "additionalProperties": false, "required": ["id", "version"], "properties": { "id": { "$ref": "#/$defs/stableId" }, "version": { "$ref": "#/$defs/stableId" } } },
+    "typedError": { "type": "object", "additionalProperties": false, "required": ["code", "class", "retryable"], "properties": { "code": { "enum": ["validation_failed", "execution_failed", "timeout", "cancelled", "journal_conflict", "journal_io", "sink_delivery_failed"] }, "class": { "enum": ["validation", "execution", "timeout", "cancellation", "concurrency", "storage", "delivery"] }, "retryable": { "type": "boolean" } } },
+    "blocking": { "type": "object", "additionalProperties": false, "required": ["code"], "properties": { "code": { "enum": ["approval_required", "dependency_unavailable", "evidence_missing", "authority_required", "external_state"] }, "required_evidence_types": { "type": "array", "maxItems": 32, "items": { "enum": ["command", "file", "link", "commit", "test", "issue"] } } } },
+    "handoff": { "type": "object", "additionalProperties": false, "required": ["from", "to"], "properties": { "from": { "enum": ["brain", "orchestrator", "dispatcher", "worker", "runtime"] }, "to": { "enum": ["brain", "orchestrator", "dispatcher", "worker", "runtime"] } } },
+    "payload": { "type": "object", "additionalProperties": false, "properties": {
+      "previous_state": { "$ref": "#/$defs/stableId" }, "state": { "$ref": "#/$defs/stableId" }, "previous_phase": { "$ref": "#/$defs/stableId" }, "phase": { "$ref": "#/$defs/stableId" },
+      "previous_revision": { "type": "integer", "minimum": 1 }, "revision": { "type": "integer", "minimum": 1 }, "checklist_changes": { "type": "integer", "minimum": 1 },
+      "evidence_count": { "type": "integer", "minimum": 1 }, "evidence_types": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/stableId" } },
+      "debt_count": { "type": "integer", "minimum": 1 }, "debt_kinds": { "type": "array", "maxItems": 32, "items": { "$ref": "#/$defs/stableId" } },
+      "accepted": { "type": "boolean" }, "exit_code": { "type": "integer" }, "timed_out": { "type": "boolean" }, "truncated": { "type": "boolean" },
+      "error": { "$ref": "#/$defs/typedError" }, "blocking": { "$ref": "#/$defs/blocking" }, "handoff": { "$ref": "#/$defs/handoff" }
+    } },
+    "attribute": { "type": "object", "additionalProperties": false, "required": ["name", "sensitivity", "value"], "properties": { "name": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$", "maxLength": 64 }, "sensitivity": { "enum": ["public", "internal"] }, "value": {} } },
+    "redaction": { "type": "object", "additionalProperties": false, "required": ["reason", "count"], "properties": { "reason": { "enum": ["sensitivity", "unsafe_name", "unsupported_type", "binary", "cycle", "depth", "collection_limit", "string_limit", "invalid_utf8", "attribute_limit", "unsafe_value"] }, "count": { "type": "integer", "minimum": 1 } } }
+  }
+}

@@ -24,7 +24,7 @@ func TestStoreRoundTripAndRevisionConflict(t *testing.T) {
 		t.Fatalf("loaded=%#v", loaded)
 	}
 	updated, err := store.Update(1, func(j *Journal) error {
-		return j.Advance(Receipt{Phase: PhaseOrient, Summary: "oriented", Evidence: testEvidence}, testNow)
+		return j.Advance(Receipt{Phase: PhaseOrient, Summary: "oriented", Evidence: newTestEvidence()}, testNow)
 	})
 	if err != nil {
 		t.Fatal(err)

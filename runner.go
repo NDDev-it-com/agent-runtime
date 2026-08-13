@@ -31,10 +31,11 @@ type Runner struct {
 }
 
 func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) {
-	manifest.applyDefaults()
-	if err := manifest.Validate(); err != nil {
+	prepared, err := manifest.Prepare()
+	if err != nil {
 		return Result{}, err
 	}
+	manifest = prepared
 	if r.Workspace.root == "" {
 		return Result{}, errors.New("workspace is required")
 	}

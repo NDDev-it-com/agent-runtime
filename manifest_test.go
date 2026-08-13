@@ -20,6 +20,18 @@ func TestDecodeTaskManifestDefaults(t *testing.T) {
 	}
 }
 
+func TestPrepareAppliesDefaultsWithoutMutatingCaller(t *testing.T) {
+	t.Parallel()
+	original := TaskManifest{SchemaVersion: TaskSchemaVersion, ID: "agent", Instructions: []string{"AGENTS.md"}, Command: []string{"agent"}, Acceptance: TaskAcceptance{ExitCodes: []int{0}}}
+	prepared, err := original.Prepare()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if original.Workdir != "" || prepared.Workdir != "." || prepared.Timeout.Duration != DefaultTimeout {
+		t.Fatalf("original=%#v prepared=%#v", original, prepared)
+	}
+}
+
 func TestDecodeTaskManifestRejectsUnknownAndTrailingData(t *testing.T) {
 	t.Parallel()
 	for _, input := range []string{
@@ -28,6 +40,30 @@ func TestDecodeTaskManifestRejectsUnknownAndTrailingData(t *testing.T) {
 	} {
 		if _, err := DecodeTaskManifest(strings.NewReader(input)); err == nil {
 			t.Fatalf("accepted %s", input)
+		}
+	}
+}
+
+func TestTaskManifestRequiredAndOptionalSlicePresence(t *testing.T) {
+	t.Parallel()
+	for _, input := range []string{
+		`{"schema_version":"v1alpha1","id":"a","command":["a"],"acceptance":{"exit_codes":[0]}}`,
+		`{"schema_version":"v1alpha1","id":"a","instructions":null,"command":["a"],"acceptance":{"exit_codes":[0]}}`,
+		`{"schema_version":"v1alpha1","id":"a","instructions":[],"command":["a"],"acceptance":{"exit_codes":[0]}}`,
+		`{"schema_version":"v1alpha1","id":"a","instructions":["a"],"command":null,"acceptance":{"exit_codes":[0]}}`,
+		`{"schema_version":"v1alpha1","id":"a","instructions":["a"],"command":["a"],"acceptance":{"exit_codes":null}}`,
+	} {
+		if _, err := DecodeTaskManifest(strings.NewReader(input)); err == nil {
+			t.Fatalf("required slice absence accepted: %s", input)
+		}
+	}
+	for _, optional := range []string{
+		`"env":null,"acceptance":{"exit_codes":[0],"output_contains":null}`,
+		`"env":[],"acceptance":{"exit_codes":[0],"output_contains":[]}`,
+	} {
+		input := `{"schema_version":"v1alpha1","id":"a","instructions":["a"],"command":["a"],` + optional + `}`
+		if _, err := DecodeTaskManifest(strings.NewReader(input)); err != nil {
+			t.Fatalf("optional empty slice rejected: %s: %v", input, err)
 		}
 	}
 }

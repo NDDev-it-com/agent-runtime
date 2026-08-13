@@ -6,7 +6,9 @@ accepted problem statement and security analysis is required before work begins.
 ## Candidate follow-ups
 
 - Stable Task and Goal schema v1 after field experience and compatibility fixtures.
-- Structured lifecycle events and redaction-aware output sinks.
+- Network exporters and retention/rotation policy for structured lifecycle
+  events, after the local redaction-aware sink contract has field experience
+  ([issue #3](https://github.com/NDDev-it-com/agent-runtime/issues/3)).
 - Explicit process-tree termination semantics per supported platform.
 - Optional adapters for established tool and model protocols.
 - Signed manifest/provenance verification at the control-plane boundary.

@@ -10,6 +10,10 @@
 The Go packages can be embedded; the reference CLI is useful in scripts,
 contract tests, and restart-safe agent workflows.
 
+The optional `observability` package derives provider-neutral lifecycle events
+from those authoritative work units and delivers them through redaction-aware
+sinks. It never replaces Task results or Goal journals.
+
 The initial release focuses on the boundary between a control plane and an
 already-installed agent client. It does not implement a model provider, tool
 protocol, scheduler, or operating-system sandbox.
@@ -108,6 +112,31 @@ Evidence discovered later can be appended to an existing receipt with
 The journal is designed for durable evidence, so commit it when it represents
 public project work. The adjacent `*.lock` file is ephemeral and ignored.
 
+## Lifecycle observability
+
+```go
+memory, _ := observability.NewMemorySink("events", 100)
+emitter, _ := observability.NewEmitter(
+    observability.Runtime{ID: "runtime-1", Version: "0.1.0"},
+    []observability.Sink{memory}, observability.Options{},
+)
+observed := observability.TaskRunner{
+    Runner: agentruntime.Runner{Workspace: workspace}, Emitter: emitter,
+    Context: observability.Context{
+        CorrelationID: "request-1",
+        Actor: observability.Actor{Kind: observability.ActorWorker, ID: "worker-1"},
+        Attempt: observability.AttemptInitial,
+    },
+}
+run := observed.Run(ctx, manifest)
+```
+
+`run.Result` and `run.ExecutionError` remain authoritative. `run.Events` and
+`run.Delivery` expose immutable observations and every sink outcome. The package
+also provides `GoalStore`, explicit handoff events, an in-memory sink, and a
+durable JSONL sink. See [`docs/observability-v1alpha1.md`](docs/observability-v1alpha1.md)
+and the canonical [event schema](schemas/lifecycle-event-v1alpha1.schema.json).
+
 ## Security model
 
 Task manifests and commands are trusted inputs. The runtime resolves the workspace,
@@ -121,6 +150,12 @@ processes, credentials, and networks available to its operating-system identity;
 descendant-process cleanup is platform dependent. Run untrusted agents in a
 container, VM, or OS sandbox with least-privilege credentials. See
 [`SECURITY.md`](SECURITY.md) and [`docs/architecture.md`](docs/architecture.md).
+
+Observability defaults to fail-closed redaction. Attribute sensitivity must be
+declared; confidential/secret, raw command/environment/provider content,
+credentials, unsafe URLs, binary values, errors/stringers, unknown structures,
+and oversize content are never sent to sinks. Redaction decisions report only
+reason/count pairs.
 
 ## Development
 

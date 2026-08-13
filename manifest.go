@@ -115,6 +115,17 @@ func (m *TaskManifest) applyDefaults() {
 	}
 }
 
+// Prepare returns a validated copy with runtime defaults applied. It is useful
+// to observers that must distinguish validation from execution without
+// mutating the caller's manifest.
+func (m TaskManifest) Prepare() (TaskManifest, error) {
+	m.applyDefaults()
+	if err := m.Validate(); err != nil {
+		return TaskManifest{}, err
+	}
+	return m, nil
+}
+
 func (m TaskManifest) Validate() error {
 	var problems []string
 	if m.SchemaVersion != TaskSchemaVersion {

@@ -7,6 +7,7 @@
 ```text
 Task manifest -> strict validation -> workspace/context resolver -> bounded process -> result
 Goal journal  -> guarded phase transition -> atomic persistence -> next phase or completion
+Task/Goal/handoff -> derived lifecycle draft -> redaction -> immutable envelope -> sinks
 ```
 
 The Task manifest is declarative and provider-neutral. The runtime owns validation,
@@ -54,9 +55,36 @@ item have evidence. JSON Schemas are distributable projections of the Go
 contract; parity tests lock their versions, states, phases, evidence types, and
 license identifier to the implementation.
 
+## Observability boundary
+
+The `observability` package is an additive adapter layer, not a third state
+machine. `TaskRunner` wraps the existing Runner. `GoalStore` takes before/after
+journal snapshots around the existing revision-guarded Store update. Explicit
+handoff drafts represent Brain, Orchestrator, Dispatcher, Worker, and Runtime
+roles without naming a provider.
+
+An emitter serializes each operation under a mutex. This gives deterministic
+per-subject sequence allocation and sink delivery order; synchronous sink calls
+are the explicit backpressure boundary. Streams are bounded and ordered only
+per subject. Correlation/causation link streams without claiming a global order.
+Event IDs derive from canonical immutable envelope content, so retry and replay
+reuse them.
+
+Raw attributes exist only in `Draft`. Redaction recursively copies allowed
+scalars, maps, and slices into bounded JSON without calling errors, stringers, or
+formatters. Unsafe keys, URLs/token patterns, sensitivities, types, binary data,
+cycles, depth, size, and collection overflow are handled before any Sink runs.
+Only reason/count summaries leave that boundary.
+
+Memory and JSONL sinks are concurrency-safe and idempotent by event ID. JSONL
+uses owner-only regular files, canonical single-line records, append writes,
+optional per-record `Sync`, bounded recovery, duplicate/version/corruption
+checks, and poison-on-partial-write semantics. Delivery results return to the
+observer while Task execution and Goal persistence remain authoritative.
+
 ## Compatibility
 
-The Go module follows semantic versioning. The `v1alpha1` Task and Goal schemas are unstable:
+The Go module follows semantic versioning. The `v1alpha1` Task, Goal, and event schemas are unstable:
 fields may change before a stable `v1` contract, with changes documented in the
 changelog. Unknown fields are deliberately fatal so configuration errors cannot
 silently change runtime behavior.
@@ -68,7 +96,7 @@ silently change runtime behavior.
 - remote execution and distributed scheduling;
 - secrets storage;
 - interactive terminal emulation;
-- durable run/event storage.
+- networked or provider-specific run/event storage.
 
 These need separate threat models and observable contracts. They are tracked in
 the roadmap rather than hidden behind incomplete abstractions.
