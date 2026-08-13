@@ -15,7 +15,7 @@ func main() {
 	contractPath := flag.String("contract", "release/v1alpha1.json", "release contract path")
 	build := flag.Bool("build", false, "build the deterministic release bundle")
 	commit := flag.String("commit", "HEAD", "exact Git commit to build")
-	out := flag.String("out", "", "empty output directory for the bundle")
+	out := flag.String("out", "", "non-existent final leaf beneath an existing private parent")
 	expectVersion := flag.String("expect-version", "", "required triggering tag version")
 	flag.Parse()
 	c, err := releasecontract.Load(*contractPath)
