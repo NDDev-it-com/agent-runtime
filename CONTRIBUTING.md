@@ -9,6 +9,7 @@ Development requires Go 1.24 or newer. Before submitting a pull request, run:
 go test -race ./...
 go vet ./...
 go build ./cmd/agent-runtime
+go run ./cmd/check-ci-contract
 ```
 
 Keep the core provider-neutral, add tests for behavior changes, update public

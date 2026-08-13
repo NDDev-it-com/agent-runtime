@@ -270,6 +270,30 @@ func (j *Journal) AddChecklistItem(item ChecklistItem, now time.Time) error {
 	return nil
 }
 
+// AddReceiptEvidence appends immutable evidence discovered after a phase
+// transition. It cannot alter the receipt summary or remove prior evidence.
+func (j *Journal) AddReceiptEvidence(phase Phase, evidence Evidence, now time.Time) error {
+	if err := j.Validate(); err != nil {
+		return err
+	}
+	if err := validateEvidence([]Evidence{evidence}); err != nil {
+		return err
+	}
+	receipt, ok := j.Goal.Receipts[phase]
+	if !ok {
+		return invalid("phase has no receipt: " + string(phase))
+	}
+	for _, existing := range receipt.Evidence {
+		if existing == evidence {
+			return invalid("duplicate receipt evidence")
+		}
+	}
+	receipt.Evidence = append(receipt.Evidence, evidence)
+	j.Goal.Receipts[phase] = receipt
+	j.touch(now)
+	return nil
+}
+
 func (j *Journal) Advance(receipt Receipt, now time.Time) error {
 	if err := j.Validate(); err != nil {
 		return err

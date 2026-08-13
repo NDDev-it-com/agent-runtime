@@ -20,6 +20,8 @@ contract.
   documentation foundations.
 - GNU AGPL-3.0-only licensing with source, schema, and documentation parity
   checks against the canonical sibling license text when available.
+- Checked CI security-tool contract that preserves Go 1.24 library compatibility
+  while running pinned `govulncheck` v1.6.0 under its required Go 1.25 toolchain.
 
 [Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.0

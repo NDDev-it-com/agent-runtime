@@ -91,6 +91,24 @@ func TestLivingChecklistCanGrowAndRequiresUniqueIDs(t *testing.T) {
 	}
 }
 
+func TestReceiptEvidenceIsAppendOnly(t *testing.T) {
+	t.Parallel()
+	j := newTestJournal(t)
+	if err := j.Advance(Receipt{Phase: PhaseOrient, Summary: "observed", Evidence: testEvidence}, testNow); err != nil {
+		t.Fatal(err)
+	}
+	extra := Evidence{Type: EvidenceLink, Reference: "https://example.test/run", Result: "failed"}
+	if err := j.AddReceiptEvidence(PhaseOrient, extra, testNow); err != nil {
+		t.Fatal(err)
+	}
+	if got := j.Goal.Receipts[PhaseOrient].Evidence; len(got) != 2 || got[1] != extra {
+		t.Fatalf("evidence=%#v", got)
+	}
+	if err := j.AddReceiptEvidence(PhaseOrient, extra, testNow); !IsCode(err, CodeInvalidGoal) {
+		t.Fatalf("duplicate error=%v", err)
+	}
+}
+
 func newTestJournal(t *testing.T) Journal {
 	t.Helper()
 	j, err := New("release", "ship release", []ChecklistItem{{ID: "release-ready", Acceptance: "all gates pass"}}, []string{"remote orchestration"}, testNow)
