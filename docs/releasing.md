@@ -47,6 +47,11 @@ covers every other asset and deliberately does not checksum itself.
    GitHub Actions app database/node identities. Display names and commit author
    strings are never trust inputs; PR number, base/head/tree/parent order and
    pre-merge check runs remain bound to the exact integration commit.
+   REST commit associations discover a bounded candidate set only. Exactly one
+   candidate must independently match GitHub's GraphQL merged-PR commit, tree
+   and ordered-parent relation plus the REST/local signed commit; stateful REST
+   test-merge SHAs are never used as final integration authority. Missing,
+   duplicate, ambiguous, indirect, squash and rebase relations fail closed.
    Integration verification is native Go on Linux and macOS. Its sole provider
    public key, fingerprint, byte digest, active status and reviewed-change-only
    rotation/revocation policy live in `provenance/v1alpha1.json`; it uses no

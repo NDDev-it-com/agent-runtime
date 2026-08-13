@@ -223,7 +223,7 @@ func TestCapturedPullIdentityAndOneFieldMutations(t *testing.T) {
 		"state":          func(value *pullResponse) { value.State = "open" },
 		"merged":         func(value *pullResponse) { value.Merged = false },
 		"merged at":      func(value *pullResponse) { value.MergedAt = time.Time{} },
-		"merge sha":      func(value *pullResponse) { value.MergeCommitSHA = strings.Repeat("d", 40) },
+		"merge sha":      func(value *pullResponse) { value.MergeCommitSHA = "invalid" },
 		"merger login":   func(value *pullResponse) { value.MergedBy.Login = "substituted" },
 		"merger id":      func(value *pullResponse) { value.MergedBy.ID++ },
 		"merger node":    func(value *pullResponse) { value.MergedBy.NodeID = "substituted" },
@@ -261,9 +261,10 @@ func TestSanitizedPR11CaptureMatchesTypedIdentity(t *testing.T) {
 		t.Fatal(err)
 	}
 	var fixture struct {
-		License     string         `json:"x_license"`
-		Pull        pullResponse   `json:"pull_request"`
-		Integration commitResponse `json:"integration_commit"`
+		License     string            `json:"x_license"`
+		Pull        pullResponse      `json:"pull_request"`
+		Integration commitResponse    `json:"integration_commit"`
+		Graph       graphPullResponse `json:"graphql_relation"`
 	}
 	decoder := json.NewDecoder(bytes.NewReader(data))
 	decoder.DisallowUnknownFields()
@@ -281,7 +282,10 @@ func TestSanitizedPR11CaptureMatchesTypedIdentity(t *testing.T) {
 	if err := validatePullIdentity(contract, request, fixture.Pull); err != nil {
 		t.Fatal(err)
 	}
-	if err := validateIntegrationIdentity(contract, fixture.Pull, fixture.Integration); err != nil {
+	if err := validateGraphPullIdentity(contract, request, fixture.Pull, fixture.Graph); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateIntegrationIdentity(contract, fixture.Pull, fixture.Graph, fixture.Integration); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -300,7 +304,8 @@ func TestIntegrationCommitIdentitySeparatesAuthorMergerAndSigner(t *testing.T) {
 		Parents:   []apiRef{{SHA: pull.Base.SHA}, {SHA: pull.Head.SHA}},
 		Commit:    commitBlock{Tree: apiRef{SHA: strings.Repeat("d", 40)}},
 	}
-	if err := validateIntegrationIdentity(contract, pull, canonical); err != nil {
+	graph := canonicalGraphPull(contract, pull, canonical)
+	if err := validateIntegrationIdentity(contract, pull, graph, canonical); err != nil {
 		t.Fatal(err)
 	}
 	mutations := map[string]func(*commitResponse){
@@ -323,7 +328,7 @@ func TestIntegrationCommitIdentitySeparatesAuthorMergerAndSigner(t *testing.T) {
 			if reflect.DeepEqual(candidate, canonical) {
 				t.Fatal("negative fixture did not change the candidate")
 			}
-			if err := validateIntegrationIdentity(contract, pull, candidate); err == nil {
+			if err := validateIntegrationIdentity(contract, pull, graph, candidate); err == nil {
 				t.Fatal("mutated integration identity was accepted")
 			}
 		})
@@ -331,8 +336,194 @@ func TestIntegrationCommitIdentitySeparatesAuthorMergerAndSigner(t *testing.T) {
 	// The author is deliberately not the integration signer trust decision.
 	candidate := canonical
 	candidate.Author = apiActor{Login: "untrusted-display-name"}
-	if err := validateIntegrationIdentity(contract, pull, candidate); err != nil {
+	if err := validateIntegrationIdentity(contract, pull, graph, candidate); err != nil {
 		t.Fatalf("author string incorrectly became integration trust: %v", err)
+	}
+}
+
+func canonicalGraphPull(contract Contract, pull pullResponse, commit commitResponse) graphPullResponse {
+	var graph graphPullResponse
+	graph.Data.Repository.ID = contract.RepositoryNodeID
+	graph.Data.Repository.DatabaseID = contract.RepositoryDatabaseID
+	graph.Data.Repository.Pull.ID = pull.NodeID
+	graph.Data.Repository.Pull.DatabaseID = pull.ID
+	graph.Data.Repository.Pull.Number = pull.Number
+	graph.Data.Repository.Pull.State = "MERGED"
+	graph.Data.Repository.Pull.Merged = true
+	graph.Data.Repository.Pull.MergedAt = pull.MergedAt
+	graph.Data.Repository.Pull.BaseRef = pull.Base.Ref
+	graph.Data.Repository.Pull.BaseOID = pull.Base.SHA
+	graph.Data.Repository.Pull.HeadRef = pull.Head.Ref
+	graph.Data.Repository.Pull.HeadOID = pull.Head.SHA
+	graph.Data.Repository.Pull.MergedBy.Login = contract.OwnerLogin
+	graph.Data.Repository.Pull.MergedBy.ID = contract.OwnerNodeID
+	graph.Data.Repository.Pull.MergedBy.DatabaseID = contract.OwnerDatabaseID
+	graph.Data.Repository.Pull.MergeCommit.OID = commit.SHA
+	graph.Data.Repository.Pull.MergeCommit.Tree.OID = commit.Commit.Tree.SHA
+	graph.Data.Repository.Pull.MergeCommit.Parents.Nodes = make([]struct {
+		OID string `json:"oid"`
+	}, len(commit.Parents))
+	for index := range commit.Parents {
+		graph.Data.Repository.Pull.MergeCommit.Parents.Nodes[index].OID = commit.Parents[index].SHA
+	}
+	return graph
+}
+
+func TestGraphPullRelationFailsClosedForOneFieldMutations(t *testing.T) {
+	t.Parallel()
+	contract, err := Load(filepath.Join("..", "..", "provenance", "v1alpha1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := VerifyRequest{CommitSHA: strings.Repeat("c", 40), PullRequest: 13}
+	pull := pullResponse{
+		ID: 42, NodeID: "PR_node", Number: 13, State: "closed", Merged: true, MergedAt: time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC),
+		MergeCommitSHA: strings.Repeat("e", 40),
+		MergedBy:       apiActor{Login: contract.OwnerLogin, ID: contract.OwnerDatabaseID, NodeID: contract.OwnerNodeID, Type: "User"},
+		Base:           apiRef{Ref: "main", SHA: strings.Repeat("a", 40), Repository: apiRepository{ID: contract.RepositoryDatabaseID, NodeID: contract.RepositoryNodeID}},
+		Head:           apiRef{Ref: "feature", SHA: strings.Repeat("b", 40), Repository: apiRepository{ID: contract.RepositoryDatabaseID, NodeID: contract.RepositoryNodeID}}, Commits: 1,
+	}
+	commit := commitResponse{SHA: request.CommitSHA, Parents: []apiRef{{SHA: pull.Base.SHA}, {SHA: pull.Head.SHA}}, Commit: commitBlock{Tree: apiRef{SHA: strings.Repeat("d", 40)}}}
+	canonical := canonicalGraphPull(contract, pull, commit)
+	if err := validateGraphPullIdentity(contract, request, pull, canonical); err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*graphPullResponse){
+		"graphql errors": func(value *graphPullResponse) {
+			value.Errors = append(value.Errors, struct {
+				Message string `json:"message"`
+			}{Message: "failure"})
+		},
+		"repository node": func(value *graphPullResponse) { value.Data.Repository.ID = "wrong" },
+		"repository id":   func(value *graphPullResponse) { value.Data.Repository.DatabaseID++ },
+		"pr node":         func(value *graphPullResponse) { value.Data.Repository.Pull.ID = "wrong" },
+		"pr id":           func(value *graphPullResponse) { value.Data.Repository.Pull.DatabaseID++ },
+		"pr number":       func(value *graphPullResponse) { value.Data.Repository.Pull.Number++ },
+		"state":           func(value *graphPullResponse) { value.Data.Repository.Pull.State = "OPEN" },
+		"merged":          func(value *graphPullResponse) { value.Data.Repository.Pull.Merged = false },
+		"merged at":       func(value *graphPullResponse) { value.Data.Repository.Pull.MergedAt = time.Time{} },
+		"merger login":    func(value *graphPullResponse) { value.Data.Repository.Pull.MergedBy.Login = "wrong" },
+		"merger node":     func(value *graphPullResponse) { value.Data.Repository.Pull.MergedBy.ID = "wrong" },
+		"merger id":       func(value *graphPullResponse) { value.Data.Repository.Pull.MergedBy.DatabaseID++ },
+		"base ref":        func(value *graphPullResponse) { value.Data.Repository.Pull.BaseRef = "wrong" },
+		"base oid":        func(value *graphPullResponse) { value.Data.Repository.Pull.BaseOID = strings.Repeat("f", 40) },
+		"head ref":        func(value *graphPullResponse) { value.Data.Repository.Pull.HeadRef = "wrong" },
+		"head oid":        func(value *graphPullResponse) { value.Data.Repository.Pull.HeadOID = strings.Repeat("f", 40) },
+		"merge oid":       func(value *graphPullResponse) { value.Data.Repository.Pull.MergeCommit.OID = strings.Repeat("f", 40) },
+		"tree":            func(value *graphPullResponse) { value.Data.Repository.Pull.MergeCommit.Tree.OID = "invalid" },
+		"parent base": func(value *graphPullResponse) {
+			value.Data.Repository.Pull.MergeCommit.Parents.Nodes[0].OID = strings.Repeat("f", 40)
+		},
+		"parent head": func(value *graphPullResponse) {
+			value.Data.Repository.Pull.MergeCommit.Parents.Nodes[1].OID = strings.Repeat("f", 40)
+		},
+		"squash/rebase": func(value *graphPullResponse) {
+			value.Data.Repository.Pull.MergeCommit.Parents.Nodes = value.Data.Repository.Pull.MergeCommit.Parents.Nodes[:1]
+		},
+	}
+	for name, mutate := range mutations {
+		name, mutate := name, mutate
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			candidate := canonical
+			candidate.Data.Repository.Pull.MergeCommit.Parents.Nodes = append([]struct {
+				OID string `json:"oid"`
+			}(nil), canonical.Data.Repository.Pull.MergeCommit.Parents.Nodes...)
+			mutate(&candidate)
+			if reflect.DeepEqual(candidate, canonical) {
+				t.Fatal("negative fixture did not change the candidate")
+			}
+			if err := validateGraphPullIdentity(contract, request, pull, candidate); err == nil {
+				t.Fatal("mutated integration relation accepted")
+			}
+		})
+	}
+}
+
+func TestIntegrationCandidateSelectionIsUniqueAndGraphBound(t *testing.T) {
+	t.Parallel()
+	contract, err := Load(filepath.Join("..", "..", "provenance", "v1alpha1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := VerifyRequest{Contract: contract, CommitSHA: strings.Repeat("c", 40)}
+	for _, test := range []struct {
+		name       string
+		candidates []int
+		wrongGraph bool
+		wantOK     bool
+	}{
+		{name: "stateful REST test merge is reconciled by exact graph", candidates: []int{13}, wantOK: true},
+		{name: "missing", candidates: nil},
+		{name: "ambiguous", candidates: []int{13, 14}},
+		{name: "wrong PR graph", candidates: []int{13}, wrongGraph: true},
+	} {
+		test := test
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/commits/") && strings.HasSuffix(r.URL.Path, "/pulls") {
+					items := make([]commitPull, len(test.candidates))
+					for index, number := range test.candidates {
+						items[index].Number = number
+					}
+					_ = json.NewEncoder(w).Encode(items)
+					return
+				}
+				if r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/pulls/") {
+					number := 0
+					_, _ = fmt.Sscanf(filepath.Base(r.URL.Path), "%d", &number)
+					_ = json.NewEncoder(w).Encode(candidatePullFixture(contract, number))
+					return
+				}
+				if r.Method == http.MethodPost && r.URL.Path == "/graphql" {
+					var input struct {
+						Variables struct {
+							Number int `json:"number"`
+						} `json:"variables"`
+					}
+					if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+						t.Error(err)
+					}
+					pull := candidatePullFixture(contract, input.Variables.Number)
+					commit := commitResponse{SHA: request.CommitSHA, Parents: []apiRef{{SHA: pull.Base.SHA}, {SHA: pull.Head.SHA}}, Commit: commitBlock{Tree: apiRef{SHA: strings.Repeat("d", 40)}}}
+					graph := canonicalGraphPull(contract, pull, commit)
+					if test.wrongGraph {
+						graph.Data.Repository.Pull.Number++
+					}
+					_ = json.NewEncoder(w).Encode(graph)
+					return
+				}
+				http.NotFound(w, r)
+			}))
+			defer server.Close()
+			client := githubClient{base: server.URL, repository: contract.Repository, token: "test", http: server.Client()}
+			pull, graph, err := selectIntegrationPull(context.Background(), client, request)
+			if test.wantOK {
+				if err != nil {
+					t.Fatal(err)
+				}
+				if pull.Number != 13 || graph.Data.Repository.Pull.MergeCommit.OID != request.CommitSHA || pull.MergeCommitSHA != request.CommitSHA {
+					t.Fatal("selected relation was not normalized to the exact integration")
+				}
+				return
+			}
+			if err == nil {
+				t.Fatalf("invalid candidate set accepted: pull=%#v", pull)
+			}
+		})
+	}
+}
+
+func candidatePullFixture(contract Contract, number int) pullResponse {
+	return pullResponse{
+		ID: int64(1000 + number), NodeID: fmt.Sprintf("PR_%d", number), Number: number, State: "closed", Merged: true,
+		MergeCommitSHA: strings.Repeat("e", 40), MergedAt: time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC),
+		MergedBy: apiActor{Login: contract.OwnerLogin, ID: contract.OwnerDatabaseID, NodeID: contract.OwnerNodeID, Type: "User"},
+		Base:     apiRef{Ref: "main", SHA: strings.Repeat("a", 40), Repository: apiRepository{ID: contract.RepositoryDatabaseID, NodeID: contract.RepositoryNodeID}},
+		Head:     apiRef{Ref: fmt.Sprintf("feature-%d", number), SHA: strings.Repeat("b", 40), Repository: apiRepository{ID: contract.RepositoryDatabaseID, NodeID: contract.RepositoryNodeID}},
+		Commits:  1,
 	}
 }
 
