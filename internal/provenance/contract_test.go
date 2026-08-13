@@ -580,3 +580,115 @@ func TestSplitCommitSignature(t *testing.T) {
 		}
 	}
 }
+
+func TestSplitCommitSignatureNormalizesGitHeaderContinuation(t *testing.T) {
+	t.Parallel()
+	raw := []byte("tree 0123456789012345678901234567890123456789\ngpgsig -----BEGIN PGP SIGNATURE-----\n abc\n -----END PGP SIGNATURE-----\n \n\nmessage\n")
+	payload, signature, err := splitCommitSignature(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(signature) != "-----BEGIN PGP SIGNATURE-----\nabc\n-----END PGP SIGNATURE-----\n" {
+		t.Fatalf("signature=%q", signature)
+	}
+	if string(payload) != "tree 0123456789012345678901234567890123456789\n\nmessage\n" {
+		t.Fatalf("payload=%q", payload)
+	}
+}
+
+func TestLocalCommitIdentityMatchesRESTExactly(t *testing.T) {
+	t.Parallel()
+	payload := []byte("tree " + strings.Repeat("d", 40) + "\nparent " + strings.Repeat("a", 40) + "\nparent " + strings.Repeat("b", 40) + "\nauthor Danil Silantyev <danilsilantyevwork@gmail.com> 1786642425 +0500\ncommitter GitHub <noreply@github.com> 1786642425 +0500\n\nmessage\n")
+	stamp := time.Unix(1786642425, 0).UTC()
+	canonical := commitResponse{Parents: []apiRef{{SHA: strings.Repeat("a", 40)}, {SHA: strings.Repeat("b", 40)}}, Commit: commitBlock{Tree: apiRef{SHA: strings.Repeat("d", 40)}, Author: apiGitIdentity{Name: "Danil Silantyev", Email: "danilsilantyevwork@gmail.com", Date: stamp}, Committer: apiGitIdentity{Name: "GitHub", Email: "noreply@github.com", Date: stamp}}}
+	if err := validateLocalCommitIdentity(payload, canonical); err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*commitResponse){
+		"tree":      func(v *commitResponse) { v.Commit.Tree.SHA = strings.Repeat("e", 40) },
+		"parent":    func(v *commitResponse) { v.Parents[1].SHA = strings.Repeat("e", 40) },
+		"author":    func(v *commitResponse) { v.Commit.Author.Email = "wrong@example.com" },
+		"committer": func(v *commitResponse) { v.Commit.Committer.Name = "Wrong" },
+	}
+	for name, mutate := range mutations {
+		name, mutate := name, mutate
+		t.Run(name, func(t *testing.T) {
+			candidate := canonical
+			candidate.Parents = append([]apiRef(nil), canonical.Parents...)
+			mutate(&candidate)
+			if reflect.DeepEqual(candidate, canonical) {
+				t.Fatal("mutation did not change candidate")
+			}
+			if validateLocalCommitIdentity(payload, candidate) == nil {
+				t.Fatal("identity substitution accepted")
+			}
+		})
+	}
+}
+
+func TestProviderVerificationMetadataFailsClosed(t *testing.T) {
+	t.Parallel()
+	merged := time.Date(2026, 8, 13, 17, 33, 45, 0, time.UTC)
+	canonical := apiVerification{Verified: true, Reason: "valid", VerifiedAt: merged.Add(5 * time.Second), Payload: "payload", Signature: "signature"}
+	for name, mutate := range map[string]func(*apiVerification){
+		"unverified":          func(v *apiVerification) { v.Verified = false },
+		"wrong reason":        func(v *apiVerification) { v.Reason = "unknown_key" },
+		"missing verified at": func(v *apiVerification) { v.VerifiedAt = time.Time{} },
+		"stale verified at":   func(v *apiVerification) { v.VerifiedAt = merged.Add(-time.Second) },
+		"missing payload":     func(v *apiVerification) { v.Payload = "" },
+		"missing signature":   func(v *apiVerification) { v.Signature = "" },
+		"substituted payload": func(v *apiVerification) { v.Payload = "different" },
+	} {
+		name, mutate := name, mutate
+		t.Run(name, func(t *testing.T) {
+			candidate := canonical
+			mutate(&candidate)
+			if reflect.DeepEqual(candidate, canonical) {
+				t.Fatal("mutation did not change candidate")
+			}
+			if verifyIntegrationSignatureEvidence("", Contract{}, candidate, []byte("payload"), []byte("signature"), merged) == nil {
+				t.Fatal("invalid provider verification evidence accepted")
+			}
+		})
+	}
+}
+
+func TestPR15SanitizedSignatureCapture(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("testdata", "pr15-signature-sanitized.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		License      string         `json:"x_license"`
+		SHA          string         `json:"sha"`
+		Tree         string         `json:"tree"`
+		Parents      []string       `json:"parents"`
+		Author       apiGitIdentity `json:"author"`
+		Committer    apiGitIdentity `json:"committer"`
+		Verification struct {
+			Verified             bool      `json:"verified"`
+			Reason               string    `json:"reason"`
+			VerifiedAt           time.Time `json:"verified_at"`
+			PayloadBytes         int       `json:"payload_bytes"`
+			PayloadSHA256        string    `json:"payload_sha256"`
+			SignatureBytes       int       `json:"signature_bytes"`
+			SignatureSHA256      string    `json:"signature_sha256"`
+			LocalRawCommitBytes  int       `json:"local_raw_commit_bytes"`
+			LocalRawCommitSHA256 string    `json:"local_raw_commit_sha256"`
+		} `json:"verification"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&fixture); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.License != "AGPL-3.0-only" || !fullSHA.MatchString(fixture.SHA) || !fullSHA.MatchString(fixture.Tree) || len(fixture.Parents) != 2 || !fixture.Verification.Verified || fixture.Verification.Reason != "valid" || fixture.Verification.VerifiedAt.IsZero() || fixture.Verification.PayloadBytes != 398 || fixture.Verification.SignatureBytes != 801 || fixture.Verification.LocalRawCommitBytes != 1223 {
+		t.Fatalf("sanitized PR15 signature capture drift: %#v", fixture)
+	}
+	for _, digest := range []string{fixture.Verification.PayloadSHA256, fixture.Verification.SignatureSHA256, fixture.Verification.LocalRawCommitSHA256} {
+		if len(digest) != 64 {
+			t.Fatal("captured digest is malformed")
+		}
+	}
+}

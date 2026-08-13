@@ -31,17 +31,21 @@ func TestColdCompileUsesFreshCacheAndExactNonExecutingCommand(t *testing.T) {
 	t.Parallel()
 	runner := &recordingRunner{}
 	var created, removed []string
+	base := t.TempDir()
 	makeTemp := func(_, pattern string) (string, error) {
-		directory := "/owned/" + pattern
+		directory, err := os.MkdirTemp(base, pattern)
 		created = append(created, directory)
-		return directory, nil
+		return directory, err
 	}
 	removeAll := func(directory string) error {
 		removed = append(removed, directory)
 		return nil
 	}
 	var output bytes.Buffer
-	err := run(context.Background(), Options{Repository: "/repository", Wrapper: "/wrapper", Stdout: &output, Stderr: io.Discard}, runner, makeTemp, removeAll)
+	copyDriver := func(_, destination string) (driverIdentity, error) {
+		return driverIdentity{path: destination, size: 1, mode: 0o500, digest: [32]byte{1}}, nil
+	}
+	err := run(context.Background(), Options{Repository: "/repository", Wrapper: "/wrapper", Stdout: &output, Stderr: io.Discard}, runner, makeTemp, removeAll, copyDriver)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,10 +54,11 @@ func TestColdCompileUsesFreshCacheAndExactNonExecutingCommand(t *testing.T) {
 	}
 	for index, call := range runner.calls {
 		target := SupportedTargets[index]
-		if call.executable != "go" || !reflect.DeepEqual(call.arguments, []string{"test", "-exec=/wrapper", "-run", "^$", "-count=1", "./..."}) {
+		driver := filepath.Join(created[index], "driver")
+		if call.executable != "go" || !reflect.DeepEqual(call.arguments, []string{"test", "-exec=" + driver, "-run", "^$", "-count=1", "./..."}) {
 			t.Fatalf("unexpected command: %#v", call)
 		}
-		for _, expected := range []string{"GOOS=" + target.GOOS, "GOARCH=" + target.GOARCH, "GOCACHE=" + created[index], "GOTOOLCHAIN=local", "CGO_ENABLED=0", WrapperEnvironment} {
+		for _, expected := range []string{"GOOS=" + target.GOOS, "GOARCH=" + target.GOARCH, "GOCACHE=" + filepath.Join(created[index], "cache"), "GOTMPDIR=" + filepath.Join(created[index], "work"), "GOTOOLCHAIN=local", "CGO_ENABLED=0", WrapperEnvironment} {
 			if !containsExact(call.environment, expected) {
 				t.Errorf("%s/%s missing %q", target.GOOS, target.GOARCH, expected)
 			}
@@ -66,12 +71,14 @@ func TestColdCompilePreservesRootAndCleanupFailure(t *testing.T) {
 	rootFailure := errors.New("compile failed")
 	cleanupFailure := errors.New("cache cleanup failed")
 	runner := &recordingRunner{failure: rootFailure}
+	base := t.TempDir()
 	err := run(
 		context.Background(),
 		Options{Repository: "/repository", Wrapper: "/wrapper", Stdout: io.Discard, Stderr: io.Discard},
 		runner,
-		func(string, string) (string, error) { return "/owned/cache", nil },
+		func(string, string) (string, error) { return os.MkdirTemp(base, "lane-") },
 		func(string) error { return cleanupFailure },
+		func(_, destination string) (driverIdentity, error) { return driverIdentity{path: destination}, nil },
 	)
 	if !errors.Is(err, rootFailure) || !errors.Is(err, cleanupFailure) {
 		t.Fatalf("root and cleanup errors were not preserved: %v", err)
@@ -81,10 +88,10 @@ func TestColdCompilePreservesRootAndCleanupFailure(t *testing.T) {
 func TestFilteredEnvironmentReplacesTargetAndCacheValues(t *testing.T) {
 	t.Parallel()
 	replacements := map[string]string{
-		"GOOS": "linux", "GOARCH": "arm64", "GOCACHE": "/cold", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "AGENT_RUNTIME_COLD_COMPILE_WRAPPER": "1",
+		"GOOS": "linux", "GOARCH": "arm64", "GOCACHE": "/cold", "GOTMPDIR": "/work", "GOTOOLCHAIN": "local", "CGO_ENABLED": "0", "AGENT_RUNTIME_COLD_COMPILE_WRAPPER": "1",
 	}
 	got := filteredEnvironment([]string{"PATH=/bin", "GOOS=attacker", "GOCACHE=warm", "MALFORMED"}, replacements)
-	for _, expected := range []string{"PATH=/bin", "GOOS=linux", "GOARCH=arm64", "GOCACHE=/cold", "GOTOOLCHAIN=local", "CGO_ENABLED=0", WrapperEnvironment} {
+	for _, expected := range []string{"PATH=/bin", "GOOS=linux", "GOARCH=arm64", "GOCACHE=/cold", "GOTMPDIR=/work", "GOTOOLCHAIN=local", "CGO_ENABLED=0", WrapperEnvironment} {
 		if !containsExact(got, expected) {
 			t.Fatalf("missing %q in %v", expected, got)
 		}
