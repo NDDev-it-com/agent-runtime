@@ -49,8 +49,10 @@ covers every other asset and deliberately does not checksum itself.
    pre-merge check runs remain bound to the exact integration commit.
    REST commit associations discover a bounded candidate set only. Exactly one
    candidate must independently match GitHub's GraphQL merged-PR commit, tree
-   and ordered-parent relation plus the REST/local signed commit; stateful REST
-   test-merge SHAs are never used as final integration authority. Missing,
+   and ordered-parent relation plus the REST/local signed commit. The REST
+   pull request `merge_commit_sha` is stateful across open/merged state and
+   merge methods, so it is retained only as diagnostic API evidence and is
+   never normalized, compared, or used as integration authority. Missing,
    duplicate, ambiguous, indirect, squash and rebase relations fail closed.
    Integration verification is native Go on Linux and macOS. Its sole provider
    public key, fingerprint, byte digest, active status and reviewed-change-only
@@ -63,7 +65,10 @@ covers every other asset and deliberately does not checksum itself.
    all packages, commands, tests and applicable platform files without running
    cross-target test binaries.
 5. Run `go run ./cmd/check-release-contract` and build twice from the same exact
-   commit into separate empty directories; require byte equality.
+   commit. Create only one private parent directory, pass two distinct
+   non-existent final leaves beneath it, and require byte equality. Never
+   pre-create either output leaf: the builder owns staging and publishes each
+   complete bundle with atomic no-replace semantics.
 6. Run full tests, race, fuzz seeds, vet, formatting, CI/security/governance
    contracts and pinned `govulncheck` under the exact patched Go 1.26.5
    security lane. The module declaration and test/release lanes remain Go 1.24.
