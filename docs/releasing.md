@@ -60,6 +60,14 @@ covers every other asset and deliberately does not checksum itself.
    ambient GPG executable, keyring, home directory, global Git configuration or
    author identity. Trust changes require a reviewed contract, schema and key
    update and invalidate old or revoked material fail closed.
+   GitHub REST `verification.payload` is the value that was signed and
+   `verification.signature` is the extracted signature. The verifier requires
+   the provider payload to equal Git's normative unsigned commit payload and
+   verifies both the provider pair and the locally embedded signature with the
+   pinned key. It does not confuse Git's multiline `gpgsig` header-continuation
+   whitespace with the extracted signature contract. Tree, ordered parents,
+   author and committer remain exactly bound to REST, GraphQL and the local
+   content-addressed commit object.
 4. Run `go run ./cmd/check-cold-compile`. It uses a fresh isolated build cache
    for every supported `darwin/linux` and `amd64/arm64` combination, compiling
    all packages, commands, tests and applicable platform files without running
