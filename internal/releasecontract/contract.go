@@ -18,6 +18,8 @@ import (
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
+
+	"github.com/NDDev-it-com/agent-runtime/internal/signatureverify"
 )
 
 const SchemaVersion = "v1alpha1"
@@ -187,10 +189,8 @@ func (c Contract) VerifyRepository(root string) error {
 	if err != nil {
 		return err
 	}
-	line := strings.TrimSpace(string(signers))
-	const canonicalSigner = "danilsilantyevwork@gmail.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM32vxPI+ii/mWp5YOy9osj/uyo5ra0HMy2+6lUOh/b2"
-	if line != canonicalSigner || strings.Count(line, "\n") != 0 {
-		return errors.New("release allowed-signers file must contain the one canonical SSH signer")
+	if err := signatureverify.ValidateTrustAnchor(signers); err != nil {
+		return fmt.Errorf("release allowed-signers: %w", err)
 	}
 	return nil
 }
@@ -249,7 +249,7 @@ func (c Contract) VerifyWorkflow(data []byte) error {
 	s := string(data)
 	required := []string{
 		"tags: ['v*.*.*']", "if: github.run_attempt == 1", "contents: read", "contents: write", "id-token: write", "attestations: write", "artifact-metadata: write",
-		"go run ./cmd/check-release-contract", "git verify-tag", "verification.verified", "refs/heads/main", "gh release create", "--verify-tag", c.Actions.Checkout, c.Actions.SetupGo, c.Actions.AttestProvenance, c.Actions.AttestSBOM,
+		"go run ./cmd/check-release-contract", "go run ./cmd/check-cold-compile", "go run ./cmd/check-signature --tag", "--expected-commit", "verification.verified", "refs/heads/main", "gh release create", "--verify-tag", c.Actions.Checkout, c.Actions.SetupGo, c.Actions.AttestProvenance, c.Actions.AttestSBOM,
 		"--expect-version",
 	}
 	for _, token := range required {
@@ -257,7 +257,7 @@ func (c Contract) VerifyWorkflow(data []byte) error {
 			return fmt.Errorf("release workflow missing required token %q", token)
 		}
 	}
-	for _, forbidden := range []string{"pull_request:", "branches: [main]", "workflow_dispatch:", "--clobber", "permissions: write-all", "secrets:", "environment:"} {
+	for _, forbidden := range []string{"pull_request:", "branches: [main]", "workflow_dispatch:", "--clobber", "permissions: write-all", "secrets:", "environment:", "git config ", "git verify-tag"} {
 		if strings.Contains(s, forbidden) {
 			return fmt.Errorf("release workflow contains forbidden publication surface %q", forbidden)
 		}

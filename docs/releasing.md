@@ -28,16 +28,31 @@ covers every other asset and deliberately does not checksum itself.
 2. Run `go run ./cmd/check-module-tidy`. This is the authoritative non-mutating
    module gate: it executes `GOTOOLCHAIN=local go mod tidy -diff` and uses that
    command's own status and output. It never compares feature work with `HEAD`.
-3. Run `go run ./cmd/check-release-contract` and build twice from the same exact
+3. Verify the exact commit with
+   `go run ./cmd/check-signature --commit "$(git rev-parse HEAD)"`. The verifier
+   uses only the repository-owned `.github/release-allowed-signers` snapshot and
+   binds verification to held ancestor directory identities. On Darwin, the
+   only accepted ancestor alias is the root-owned canonical
+   `/var -> private/var` system transition; Linux accepts no ancestor aliases.
+   Every alias and directory identity is revalidated before and after Git runs.
+   The verifier uses command-local Git configuration; it never reads or writes
+   ambient Git trust.
+4. Run `go run ./cmd/check-cold-compile`. It uses a fresh isolated build cache
+   for every supported `darwin/linux` and `amd64/arm64` combination, compiling
+   all packages, commands, tests and applicable platform files without running
+   cross-target test binaries.
+5. Run `go run ./cmd/check-release-contract` and build twice from the same exact
    commit into separate empty directories; require byte equality.
-4. Run full tests, race, fuzz seeds, vet, formatting, CI/security/governance
+6. Run full tests, race, fuzz seeds, vet, formatting, CI/security/governance
    contracts and pinned `govulncheck` under Go 1.25.
-5. Merge a signed PR only after exact-head CI and CodeQL are green. Recheck the
+7. Merge a signed PR only after exact-head CI and CodeQL are green. Recheck the
    post-merge `main` runs and reread this contract.
-6. Confirm repository immutable releases are enabled, no tag/release exists,
+8. Confirm repository immutable releases are enabled, no tag/release exists,
    and the clean local `main` equals `origin/main`.
-7. Create an annotated SSH-signed `v0.1.0` tag on that exact commit, verify it
-   locally with `.github/release-allowed-signers`, and push only the tag.
+9. Create an annotated SSH-signed `v0.1.0` tag on that exact commit, verify it
+   locally with `go run ./cmd/check-signature --tag "$(git rev-parse
+   'v0.1.0^{tag}')" --expected-commit "$(git rev-parse
+   'v0.1.0^{commit}')"`, and push only the tag.
 
 The tag workflow rejects reruns, wrong refs or versions, lightweight/unverified
 tags, a tag not equal to current `main`, disabled immutable releases, an

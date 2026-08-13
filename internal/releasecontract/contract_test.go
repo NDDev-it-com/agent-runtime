@@ -203,6 +203,8 @@ func TestWorkflowRejectsPublicationWeakening(t *testing.T) {
 		{"missing OIDC", func(s string) string { return strings.Replace(s, "      id-token: write\n", "", 1) }},
 		{"clobber", func(s string) string { return s + "\n# --clobber\n" }},
 		{"rerun", func(s string) string { return strings.Replace(s, "    if: github.run_attempt == 1\n", "", 1) }},
+		{"ambient Git trust", func(s string) string { return s + "\n# git config gpg.ssh.allowedSignersFile attacker\n" }},
+		{"direct Git verifier", func(s string) string { return s + "\n# git verify-tag v0.1.0\n" }},
 	}
 	for _, tc := range mutations {
 		tc := tc

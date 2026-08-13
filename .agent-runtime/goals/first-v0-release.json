@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 5,
+  "revision": 10,
   "goal": {
     "id": "first-v0-release",
     "intent": "Publish the first verifiable v0.1.0 Go module/source release from an annotated signed exact-main tag",
@@ -144,9 +144,201 @@
           }
         ],
         "recorded_at": "2026-08-13T12:39:21Z"
+      },
+      "recovery_attempt1_provenance_failure": {
+        "phase": "verify",
+        "summary": "Recovery Attempt1 stopped after signed commit caf8fbb when a direct git verify-commit invocation lacked an explicit allowed-signers trust anchor. The failure was gate construction, not a signature verdict; no repair or rerun occurred before the canonical handoff.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9#issuecomment-5280536696",
+            "result": "API-byte-equal Attempt1 receipt preserves exact command/output, green predecessor gates and clean committed state."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:41:19Z"
+      },
+      "recovery_attempt2_signature_orient": {
+        "phase": "orient",
+        "summary": "Audited the tracked one-signer allowlist, signed commit object, ambient local signing settings, CI, release workflow, documentation and release validator. Chose one repository-owned verifier with canonical principal/fingerprint binding, command-local Git trust and no config writes.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9#issuecomment-5280552333",
+            "result": "API-byte-equal Attempt2 lineage records the trust boundary and exact preserved commit before mutation."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:54:31Z"
+      },
+      "recovery_attempt2_signature_execute": {
+        "phase": "execute",
+        "summary": "Implemented a canonical commit/tag SSH signature verifier with exact object/peeled-commit binding, canonical principal/key fingerprint, signed-commit allowlist parity, isolated command-local Git configuration, minimal environment, repository identity holds and an owned fsynced trust-snapshot transaction. CI, release workflow, docs and release validation delegate to it.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/signatureverify; cmd/check-signature; .github/workflows/ci.yml; .github/workflows/release.yml",
+            "result": "Trust cleanup preserves root plus cleanup errors and foreign residuals; ambient Git/repository/object/SSH/pager/editor overrides have no authority."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:54:31Z"
+      },
+      "recovery_attempt2_compile_failure": {
+        "phase": "verify",
+        "summary": "Attempt2 stopped at its first compile-only gate after gofmt succeeded because ownership.go referenced context.Context without importing context. No repair or rerun occurred before the canonical handoff.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9#issuecomment-5280735416",
+            "result": "API-byte-equal Attempt2 receipt preserves the exact command/output, signed caf8fbb lineage and dirty WIP hash."
+          }
+        ],
+        "recorded_at": "2026-08-13T12:59:04Z"
+      },
+      "recovery_attempt3_compile_orient": {
+        "phase": "orient",
+        "summary": "Final Attempt3 audited every changed/new Go file's referenced package identifiers, imports, commands and platform twins. The context binding was the sole missing import. Existing constraints are exactly darwin, linux, darwin-or-linux and their unsupported complement; dependencies retain x/mod module parsing, x/sys syscall and standard-library verifier ownership.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "repository-wide changed/untracked Go import, identifier and build-constraint inventory",
+            "result": "Audit proved the context import and defined the cold darwin/linux x amd64/arm64 compile boundary before mutation. A pre-gate zsh audit command reused reserved variable path and lost command lookup; it made no repository mutation and the corrected read-only audit completed."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:03:03Z"
+      },
+      "recovery_attempt3_compile_execute": {
+        "phase": "execute",
+        "summary": "Added the proven context import and one cold-compile command that uses a fresh GOCACHE and non-executing wrapper for every supported OS/architecture lane. CI/docs delegate to it; tests lock target order, environment replacement, build constraints, command shape and root-plus-cache-cleanup evidence.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/compilematrix; cmd/check-cold-compile; .github/workflows/ci.yml; docs/releasing.md",
+            "result": "Missing imports and build-tag-only dependency drift must compile cold before focused or substantive tests."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:03:03Z"
+      },
+      "recovery_cycle_darwin_alias_orient": {
+        "phase": "orient",
+        "summary": "A new recovery-cycle Attempt1 preserved the prior terminal receipt and exact dirty lineage, then re-audited the signature verifier, trust snapshot, release surfaces and current Apple/POSIX/Go primary guidance. The remaining boundary was the pathname Lstat ancestor model rejecting the canonical macOS /var -> private/var system alias before Git verification.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9#issuecomment-5280850916",
+            "result": "API-byte-equal lineage records exact base/head/dirty state, what was already implemented, the bounded identity-walker design and remaining proof before mutation."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:14:22Z"
+      },
+      "recovery_cycle_darwin_alias_execute": {
+        "phase": "execute",
+        "summary": "Replaced pathname ancestor checks with one fd-relative identity-recording walker. Darwin authorizes only the exact root-owned /var -> private/var transition and verifies its link plus target identities; Linux denies every ancestor alias. Held directories, .git and the alias transcript are revalidated around every Git operation and all acquired descriptors have close-once cleanup with joined errors.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/signatureverify/ancestor_unix.go; internal/signatureverify/alias_darwin.go; internal/signatureverify/alias_linux.go; internal/signatureverify/ancestor_unix_test.go",
+            "result": "The bounded walker uses openat/fstatat/readlinkat with no EvalSymlinks authority, string-prefix trust or ambient Git configuration."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:14:22Z"
+      },
+      "recovery_cycle_darwin_alias_preverify_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Before the first gate, reviewed every new return, descriptor owner, rewalk, alias policy, cleanup path and verifier call site. Corrected partial-capture error returns so deferred cleanup retains ownership, preserved stable path-identity error vocabulary, and synchronized the public release procedure. Existing trust residual-debt, root-plus-cleanup, signer, module, SPDX, archive and publication boundaries remain unchanged.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "repository-wide signature/alias/cleanup search, complete changed-file inspection and diff check",
+            "result": "No alternate symlink resolver, path-based trust fallback, direct signature-verification fork or unowned captured descriptor remains before verification."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:14:22Z"
+      },
+      "recovery_cycle_darwin_alias_attempt1_failure": {
+        "phase": "verify",
+        "summary": "Attempt1 stopped at the first focused signature suite after the cold darwin/linux amd64/arm64 matrix was green. Six tests exited early because exact directory identity equality treated legitimate shared temporary-ancestor link-count churn as replacement; no repair or rerun preceded the handoff.",
+        "evidence": [
+          {
+            "type": "issue",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/issues/9#issuecomment-5280949004",
+            "result": "The 6212-byte API-byte-equal receipt (SHA-256 f6c95bac2010b68f860002f980c996c364b311d0da18d50728962bf050857df9) preserves the exact command, output, hashes and unproven gates."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:22:31Z"
+      },
+      "recovery_cycle_darwin_alias_attempt2_orient": {
+        "phase": "orient",
+        "summary": "Attempt2 audited every captured stat field, all six derivative failures, parallel fixture topology, verifier concurrency and Apple/POSIX/Go primary semantics. Device/inode, object type, UID/GID and security mode are stable security invariants; directory size/timestamps are not recorded and live nlink may change as children change. Darwin symlinks retain exact identity, one-link and bounded-target invariants; Linux aliases remain forbidden.",
+        "evidence": [
+          {
+            "type": "source",
+            "reference": "Apple fstat(2), Secure Coding Guide race guidance, File System Programming Guide, POSIX directory/stat semantics, and Go syscall Stat_t definitions",
+            "result": "Primary sources support descriptor-bound identity checks, no-follow traversal, object type/owner/mode validation and non-authoritative mutable directory metadata."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:22:31Z"
+      },
+      "recovery_cycle_darwin_alias_attempt2_execute": {
+        "phase": "execute",
+        "summary": "Centralized directory and symlink invariants in one typed validator. Held and freshly rewalked directories require stable dev/inode/type/UID/GID/security mode and a live nonzero link count without exact-count equality. Canonical Darwin alias identity and target remain exact. Added positive child-churn and parallel-repository coverage plus deterministic replacement, symlink, ownership, mode, type, inode, unlink and link-invariant negatives.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/signatureverify/ancestor_unix.go; internal/signatureverify/ancestor_unix_test.go; internal/signatureverify/verify_test.go",
+            "result": "One object-kind vocabulary now owns capture/revalidation/rewalk diagnostics; existing trust, command, diagnostic and repository-replacement assertions remain intact and must be reached by the focused gate."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:22:31Z"
+      },
+      "recovery_cycle_darwin_alias_attempt2_reconcile": {
+        "phase": "reconcile",
+        "summary": "Compared the repaired verifier with issue #9 release acceptance, the six prior failures and the whole accumulated release WIP. The intended trust-snapshot mutation/residual-debt, repository replacement, command-root and diagnostic-writer assertions now execute and pass. Darwin retains one exact canonical alias; Linux retains no-alias behavior; CI, release workflow, docs and release validator use the same verifier and cold matrix.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "focused signature suite, repository surface parity tests, complete tracked/untracked diff review",
+            "result": "No alternate signature path, ambient config trust, pathname canonicalizer, direct git verifier or weakened release validator remains."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:29:48Z"
+      },
+      "recovery_cycle_darwin_alias_attempt2_self_review": {
+        "phase": "self_review",
+        "summary": "Independently reviewed architecture, TOCTOU behavior, descriptor ownership, error aggregation, platform constraints, concurrency, tests, public docs, schemas, signer identity, module/SPDX closure and release permissions. Capture, held-FD validation and anchored rewalk share one object-kind invariant vocabulary; mutable directory size/timestamps are absent and only live nlink is non-exact.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "full source/diff inspection plus unsafe resolver, cleanup, TODO, action-pin and direct-verifier searches",
+            "result": "Stable dev/inode/type/UID/GID/security-mode invariants remain exact, trusted symlink identity/target/link count remain exact, and close/root errors remain joined."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:29:48Z"
+      },
+      "recovery_cycle_darwin_alias_attempt2_omission": {
+        "phase": "completeness_omission_audit",
+        "summary": "Asked what may have been forgotten: checked child creation/removal, parallel repositories, ancestor rename/inode swap/symlink insertion, owner/group/mode/type/unlink/link drift, alias target and identity drift, component and target budgets, root-plus-cleanup evidence, partial capture cleanup, fd close-once, platform build tags, workflow/docs parity, tags/releases and temporary proof residue.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "negative/positive invariant tests, full fuzz/race/security gates and clean temporary-proof cleanup",
+            "result": "No silent alias expansion, stale equality check, test serialization, skipped platform lane, release side effect or remaining temporary bundle was found."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:29:48Z"
+      },
+      "recovery_cycle_darwin_alias_attempt2_verify": {
+        "phase": "verify",
+        "summary": "Gofmt; cold darwin/linux amd64/arm64 compilation; focused signature and releasecontract suites; module tidy; full tests; race; vet; six fuzz targets; CI/governance/release contracts; deterministic two-build equality; CLI builds; JSON/schema parsing; exact signed caf8fbb verification; diff checks; and govulncheck v1.6.0 under Go 1.26.4 all passed. Staticcheck is not installed and no unpinned substitute was introduced.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "Attempt2 local gate transcript 2026-08-13",
+            "result": "All executed product, test, race, schema, reproducibility and security gates exited zero; govulncheck reported no called vulnerabilities. One cleanup-trap command was rejected before execution by command policy and was rerun safely without destructive cleanup syntax; it did not consume an attempt."
+          }
+        ],
+        "recorded_at": "2026-08-13T13:29:48Z"
       }
     },
     "created_at": "2026-08-13T03:49:29.267966Z",
-    "updated_at": "2026-08-13T12:39:21Z"
+    "updated_at": "2026-08-13T13:29:48Z"
   }
 }

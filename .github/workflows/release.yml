@@ -45,9 +45,9 @@ jobs:
           test "$RELEASE_REF" = "refs/tags/$RELEASE_TAG"
           go run ./cmd/check-release-contract --expect-version "$RELEASE_TAG"
           test "$(git cat-file -t "$RELEASE_TAG")" = tag
-          git config gpg.ssh.allowedSignersFile "$PWD/.github/release-allowed-signers"
-          git verify-tag "$RELEASE_TAG"
           tag_commit="$(git rev-parse "$RELEASE_TAG^{commit}")"
+          tag_object="$(git rev-parse "$RELEASE_TAG^{tag}")"
+          go run ./cmd/check-signature --tag "$tag_object" --expected-commit "$tag_commit"
           test "$tag_commit" = "$(git rev-parse HEAD)"
           git fetch --no-tags origin refs/heads/main:refs/remotes/origin/main
           test "$tag_commit" = "$(git rev-parse refs/remotes/origin/main)"
@@ -60,6 +60,8 @@ jobs:
             echo "release already exists; immutable releases are append-only" >&2
             exit 1
           fi
+      - name: Cold-compile every supported platform variant
+        run: go run ./cmd/check-cold-compile
       - name: Validate contract and build deterministic bundle
         run: |
           set -euo pipefail
