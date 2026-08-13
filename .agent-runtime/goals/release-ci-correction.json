@@ -1,0 +1,125 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 9,
+  "goal": {
+    "id": "release-ci-correction",
+    "intent": "Correct release workflow toolchain mismatch and require exact-head remote CI evidence before closure",
+    "acceptance": [
+      {
+        "id": "workflow",
+        "acceptance": "CI test matrix retains Go 1.24 while govulncheck runs with its required Go 1.25 toolchain",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": ".github/workflows/ci.yml",
+            "result": "Go 1.24 compatibility test matrix and Go 1.25 scanner toolchain are separately and explicitly configured."
+          }
+        ]
+      },
+      {
+        "id": "remote-evidence",
+        "acceptance": "CI and CodeQL succeed on the exact final signed main commit",
+        "status": "pending"
+      },
+      {
+        "id": "publication",
+        "acceptance": "Signed correction commit is published to public main with a clean local checkout",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Change the Go 1.24 module compatibility baseline"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Asked what may have been forgotten: checked both setup-go occurrences after initially patching the wrong repeated block and corrected it before commit; verified test stays 1.24 and scanner is 1.25. Checked pending signed-head CI, CodeQL, dirty state and journal lifecycle. Remote exact-head evidence remains intentionally pending.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "sed .github/workflows/ci.yml; independent local gates",
+            "result": "Repeated configuration blocks are correct; local tests, vet, scanner and diff checks pass; remote proof not falsely claimed."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:55:29.916457Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Updated only the govulncheck setup-go version to 1.25.x and documented why; retained the test matrix at Go 1.24.x.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": ".github/workflows/ci.yml",
+            "result": "Test job uses 1.24.x; govulncheck job uses 1.25.x for scanner compatibility."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:54:47.871783Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Keep module/test compatibility at Go 1.24 and change only the govulncheck job toolchain to Go 1.25. Re-run local gates, publish a signed correction, then wait for CI and CodeQL on the exact final SHA. Non-goal is changing the module baseline.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": ".github/workflows/ci.yml",
+            "result": "Single-source workflow separates compatibility test toolchain from scanner implementation toolchain."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:54:47.861076Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Inspected exact remote failure from superseded run 31659068188, current signed head runs, workflow configuration and local toolchain. Existing implementation and local gates pass; remote govulncheck failed because v1.6.0 requires Go 1.25 while CI installed Go 1.24.",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659068188",
+            "result": "govulncheck job failed before scanning: tool requires Go \u003e=1.25, runner used Go 1.24.13 with GOTOOLCHAIN=local."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:54:47.845642Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "Reconciled workflow comments, Go module baseline, scanner requirement and exact remote failure. No product code, schemas, parent GDS or siblings changed; Go 1.24 compatibility remains enforced independently.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "workflow inspection; git diff; parent boundary inspection",
+            "result": "Only agent-runtime CI configuration and its corrective Goal journal changed; terms and versions match tool requirements."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:55:29.88865Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "Reviewed correctness, security, workflow least privilege, pinning, compatibility and false-green behavior. Actions remain SHA-pinned with read-only contents; the scanner version remains pinned; the toolchain exception is scoped only to scanner execution.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": ".github/workflows/ci.yml",
+            "result": "No broadened permissions, floating actions or module-baseline change introduced."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:55:29.902176Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "Independent local verification passed: race tests, go vet, govulncheck v1.6.0 under the available compatible toolchain and diff check. Remote CI and CodeQL remain required acceptance evidence before closure.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "go test -race ./...; go vet ./...; govulncheck@v1.6.0 ./...; git diff --check",
+            "result": "All independent local commands exited 0; govulncheck found no called vulnerabilities."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:55:29.925066Z"
+      }
+    },
+    "created_at": "2026-08-13T01:54:47.826811Z",
+    "updated_at": "2026-08-13T01:55:29.936461Z"
+  }
+}
