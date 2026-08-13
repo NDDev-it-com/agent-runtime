@@ -5,26 +5,35 @@
   "title": "agent-runtime provenance contract v1alpha1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema_version", "repository", "owner_login", "owner_ssh_allowed_signers", "integration_openpgp_key", "integration_openpgp_fingerprint", "integration_openpgp_sha256", "integration_openpgp_status", "trust_update_policy", "merge_method", "required_checks"],
+  "required": ["schema_version", "repository", "repository_database_id", "repository_node_id", "owner_login", "owner_database_id", "owner_node_id", "owner_ssh_allowed_signers", "integration_openpgp_key", "integration_openpgp_fingerprint", "integration_openpgp_sha256", "integration_openpgp_status", "integration_signer_login", "integration_signer_database_id", "integration_signer_node_id", "trust_update_policy", "merge_method", "required_checks"],
   "properties": {
     "schema_version": {"const": "v1alpha1"},
     "repository": {"const": "NDDev-it-com/agent-runtime"},
+    "repository_database_id": {"const": 1332584050},
+    "repository_node_id": {"const": "R_kgDOT22ecg"},
     "owner_login": {"const": "rldyourmnd"},
+    "owner_database_id": {"const": 102828838},
+    "owner_node_id": {"const": "U_kgDOBiELJg"},
     "owner_ssh_allowed_signers": {"const": ".github/release-allowed-signers"},
     "integration_openpgp_key": {"const": ".github/github-web-flow.asc"},
     "integration_openpgp_fingerprint": {"const": "968479A1AFF927E37D1A566BB5690EEEBB952194"},
     "integration_openpgp_sha256": {"const": "40ce89d21fb075092d256f9fbf62a1c19299d3282cb913d3e61d08235d0c491a"},
     "integration_openpgp_status": {"const": "active"},
+    "integration_signer_login": {"const": "web-flow"},
+    "integration_signer_database_id": {"const": 19864447},
+    "integration_signer_node_id": {"const": "MDQ6VXNlcjE5ODY0NDQ3"},
     "trust_update_policy": {"const": "reviewed-contract-change"},
     "merge_method": {"const": "merge"},
     "required_checks": {
       "type": "array", "minItems": 4, "maxItems": 4,
       "items": {
         "type": "object", "additionalProperties": false,
-        "required": ["context", "app_id", "workflow_id", "event"],
+        "required": ["context", "app_id", "app_node_id", "app_slug", "workflow_id", "event"],
         "properties": {
           "context": {"enum": ["Analyze (go)", "govulncheck", "test (macos-latest)", "test (ubuntu-latest)"]},
           "app_id": {"const": 15368},
+          "app_node_id": {"const": "MDM6QXBwMTUzNjg="},
+          "app_slug": {"const": "github-actions"},
           "workflow_id": {"type": "integer", "minimum": 1},
           "event": {"enum": ["dynamic", "pull_request"]}
         }

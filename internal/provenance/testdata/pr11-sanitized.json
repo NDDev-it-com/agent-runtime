@@ -1,0 +1,24 @@
+{
+  "x_license": "AGPL-3.0-only",
+  "pull_request": {
+    "id": 4272531825,
+    "node_id": "PR_kwDOT22ecs7-qalx",
+    "number": 11,
+    "state": "closed",
+    "merged": true,
+    "merge_commit_sha": "36d95405d7f237181a483c4effaacb3ec7b589a9",
+    "merged_at": "2026-08-13T15:35:29Z",
+    "merged_by": {"login": "rldyourmnd", "id": 102828838, "node_id": "U_kgDOBiELJg", "type": "User"},
+    "base": {"ref": "main", "sha": "2d7afa228666ff536a072717270b5f63b418efb7", "repo": {"id": 1332584050, "node_id": "R_kgDOT22ecg"}},
+    "head": {"ref": "fix/provenance-graph", "sha": "69bd546df7fce115768f20ee341630bdbe91390a", "repo": {"id": 1332584050, "node_id": "R_kgDOT22ecg"}},
+    "commits": 1
+  },
+  "integration_commit": {
+    "sha": "36d95405d7f237181a483c4effaacb3ec7b589a9",
+    "node_id": "C_kwDOT22ectoAKDM2ZDk1NDA1ZDdmMjM3MTgxYTQ4M2M0ZWZmYWFjYjNlYzdiNTg5YTk",
+    "author": {"login": "rldyourmnd", "id": 102828838, "node_id": "U_kgDOBiELJg", "type": "User"},
+    "committer": {"login": "web-flow", "id": 19864447, "node_id": "MDQ6VXNlcjE5ODY0NDQ3", "type": "User"},
+    "parents": [{"sha": "2d7afa228666ff536a072717270b5f63b418efb7"}, {"sha": "69bd546df7fce115768f20ee341630bdbe91390a"}],
+    "commit": {"tree": {"sha": "e708fa4e26586e307186ec711e2bb1de9c44603b"}}
+  }
+}

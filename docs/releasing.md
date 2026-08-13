@@ -43,6 +43,10 @@ covers every other asset and deliberately does not checksum itself.
    Every alias and directory identity is revalidated before and after Git runs.
    The verifier uses command-local Git configuration; it never reads or writes
    ambient Git trust.
+   The contract pins repository, authorized merger, GitHub web-flow signer and
+   GitHub Actions app database/node identities. Display names and commit author
+   strings are never trust inputs; PR number, base/head/tree/parent order and
+   pre-merge check runs remain bound to the exact integration commit.
    Integration verification is native Go on Linux and macOS. Its sole provider
    public key, fingerprint, byte digest, active status and reviewed-change-only
    rotation/revocation policy live in `provenance/v1alpha1.json`; it uses no

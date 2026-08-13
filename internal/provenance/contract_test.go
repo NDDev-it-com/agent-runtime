@@ -81,7 +81,7 @@ func TestExactHeadChecksFailClosed(t *testing.T) {
 	}
 	head := strings.Repeat("a", 40)
 	merged := time.Date(2026, 8, 13, 12, 0, 0, 0, time.UTC)
-	for _, mutation := range []string{"", "wrong-app", "rerun", "late", "missing"} {
+	for _, mutation := range []string{"", "wrong-app", "missing-suite", "rerun", "late", "missing"} {
 		mutation := mutation
 		t.Run(mutation, func(t *testing.T) {
 			t.Parallel()
@@ -95,11 +95,17 @@ func TestExactHeadChecksFailClosed(t *testing.T) {
 						}
 						check := checkRun{ID: int64(index + 1), Name: required.Context, HeadSHA: head, Status: "completed", Conclusion: "success", DetailsURL: "https://github.com/NDDev-it-com/agent-runtime/actions/runs/" + string(rune('1'+index)), CompletedAt: merged.Add(-time.Minute)}
 						check.App.ID = required.AppID
+						check.App.NodeID = required.AppNodeID
+						check.App.Slug = required.AppSlug
+						check.CheckSuite.ID = int64(100 + index)
 						if mutation == "wrong-app" && index == 0 {
 							check.App.ID++
 						}
 						if mutation == "late" && index == 0 {
 							check.CompletedAt = merged.Add(time.Minute)
+						}
+						if mutation == "missing-suite" && index == 0 {
+							check.CheckSuite.ID = 0
 						}
 						runs = append(runs, check)
 					}
@@ -116,7 +122,7 @@ func TestExactHeadChecksFailClosed(t *testing.T) {
 				_ = json.NewEncoder(w).Encode(workflowRun{ID: int64(id), RunAttempt: attempt, Event: required.Event, HeadSHA: head, Status: "completed", Conclusion: "success", WorkflowID: required.WorkflowID, UpdatedAt: merged.Add(-time.Second)})
 			}))
 			defer server.Close()
-			_, err := verifyChecks(context.Background(), githubClient{base: server.URL, repository: contract.Repository, token: "test", http: server.Client()}, contract, head, merged)
+			_, _, err := verifyChecks(context.Background(), githubClient{base: server.URL, repository: contract.Repository, token: "test", http: server.Client()}, contract, head, merged)
 			if mutation == "" && err != nil {
 				t.Fatal(err)
 			}
@@ -143,6 +149,12 @@ func TestContractFailsClosed(t *testing.T) {
 		},
 		"wrong app": func(candidate *Contract) {
 			candidate.RequiredChecks[requiredCheckIndex(t, candidate.RequiredChecks, "govulncheck")].AppID++
+		},
+		"wrong app node": func(candidate *Contract) {
+			candidate.RequiredChecks[requiredCheckIndex(t, candidate.RequiredChecks, "govulncheck")].AppNodeID = "substituted"
+		},
+		"wrong app slug": func(candidate *Contract) {
+			candidate.RequiredChecks[requiredCheckIndex(t, candidate.RequiredChecks, "govulncheck")].AppSlug = "substituted"
 		},
 		"wrong workflow": func(candidate *Contract) {
 			candidate.RequiredChecks[requiredCheckIndex(t, candidate.RequiredChecks, "govulncheck")].WorkflowID++
@@ -183,6 +195,144 @@ func TestContractFailsClosed(t *testing.T) {
 	}
 	if _, err := Load(path); err == nil {
 		t.Fatal("unknown field accepted")
+	}
+}
+
+func TestCapturedPullIdentityAndOneFieldMutations(t *testing.T) {
+	t.Parallel()
+	contract, err := Load(filepath.Join("..", "..", "provenance", "v1alpha1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := VerifyRequest{CommitSHA: strings.Repeat("c", 40), PullRequest: 11}
+	canonical := pullResponse{
+		ID: 4272531825, NodeID: "PR_kwDOT22ecs7-qalx", Number: 11, State: "closed", Merged: true,
+		MergeCommitSHA: request.CommitSHA, MergedAt: time.Date(2026, 8, 13, 15, 35, 29, 0, time.UTC),
+		MergedBy: apiActor{Login: contract.OwnerLogin, ID: contract.OwnerDatabaseID, NodeID: contract.OwnerNodeID, Type: "User"},
+		Base:     apiRef{Ref: "main", SHA: strings.Repeat("a", 40), Repository: apiRepository{ID: contract.RepositoryDatabaseID, NodeID: contract.RepositoryNodeID}},
+		Head:     apiRef{Ref: "fix/provenance-graph", SHA: strings.Repeat("b", 40), Repository: apiRepository{ID: contract.RepositoryDatabaseID, NodeID: contract.RepositoryNodeID}},
+		Commits:  1,
+	}
+	if err := validatePullIdentity(contract, request, canonical); err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*pullResponse){
+		"pr id":          func(value *pullResponse) { value.ID = 0 },
+		"pr node":        func(value *pullResponse) { value.NodeID = "" },
+		"number":         func(value *pullResponse) { value.Number++ },
+		"state":          func(value *pullResponse) { value.State = "open" },
+		"merged":         func(value *pullResponse) { value.Merged = false },
+		"merged at":      func(value *pullResponse) { value.MergedAt = time.Time{} },
+		"merge sha":      func(value *pullResponse) { value.MergeCommitSHA = strings.Repeat("d", 40) },
+		"merger login":   func(value *pullResponse) { value.MergedBy.Login = "substituted" },
+		"merger id":      func(value *pullResponse) { value.MergedBy.ID++ },
+		"merger node":    func(value *pullResponse) { value.MergedBy.NodeID = "substituted" },
+		"merger type":    func(value *pullResponse) { value.MergedBy.Type = "Bot" },
+		"base ref":       func(value *pullResponse) { value.Base.Ref = "other" },
+		"base sha":       func(value *pullResponse) { value.Base.SHA = "invalid" },
+		"base repo id":   func(value *pullResponse) { value.Base.Repository.ID++ },
+		"base repo node": func(value *pullResponse) { value.Base.Repository.NodeID = "substituted" },
+		"head ref":       func(value *pullResponse) { value.Head.Ref = "" },
+		"head sha":       func(value *pullResponse) { value.Head.SHA = "invalid" },
+		"head repo id":   func(value *pullResponse) { value.Head.Repository.ID++ },
+		"head repo node": func(value *pullResponse) { value.Head.Repository.NodeID = "substituted" },
+		"commit bound":   func(value *pullResponse) { value.Commits = 0 },
+	}
+	for name, mutate := range mutations {
+		name, mutate := name, mutate
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			candidate := canonical
+			mutate(&candidate)
+			if reflect.DeepEqual(candidate, canonical) {
+				t.Fatal("negative fixture did not change the candidate")
+			}
+			if err := validatePullIdentity(contract, request, candidate); err == nil {
+				t.Fatal("mutated identity was accepted")
+			}
+		})
+	}
+}
+
+func TestSanitizedPR11CaptureMatchesTypedIdentity(t *testing.T) {
+	t.Parallel()
+	data, err := os.ReadFile(filepath.Join("testdata", "pr11-sanitized.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fixture struct {
+		License     string         `json:"x_license"`
+		Pull        pullResponse   `json:"pull_request"`
+		Integration commitResponse `json:"integration_commit"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&fixture); err != nil {
+		t.Fatal(err)
+	}
+	contract, err := Load(filepath.Join("..", "..", "provenance", "v1alpha1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	request := VerifyRequest{CommitSHA: fixture.Integration.SHA, PullRequest: fixture.Pull.Number}
+	if fixture.License != "AGPL-3.0-only" {
+		t.Fatal("captured fixture license drift")
+	}
+	if err := validatePullIdentity(contract, request, fixture.Pull); err != nil {
+		t.Fatal(err)
+	}
+	if err := validateIntegrationIdentity(contract, fixture.Pull, fixture.Integration); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestIntegrationCommitIdentitySeparatesAuthorMergerAndSigner(t *testing.T) {
+	t.Parallel()
+	contract, err := Load(filepath.Join("..", "..", "provenance", "v1alpha1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	pull := pullResponse{MergeCommitSHA: strings.Repeat("c", 40), Base: apiRef{SHA: strings.Repeat("a", 40)}, Head: apiRef{SHA: strings.Repeat("b", 40)}}
+	canonical := commitResponse{
+		SHA:       pull.MergeCommitSHA,
+		Author:    apiActor{Login: contract.OwnerLogin, ID: contract.OwnerDatabaseID, NodeID: contract.OwnerNodeID, Type: "User"},
+		Committer: apiActor{Login: contract.IntegrationSignerLogin, ID: contract.IntegrationSignerDatabaseID, NodeID: contract.IntegrationSignerNodeID, Type: "User"},
+		Parents:   []apiRef{{SHA: pull.Base.SHA}, {SHA: pull.Head.SHA}},
+		Commit:    commitBlock{Tree: apiRef{SHA: strings.Repeat("d", 40)}},
+	}
+	if err := validateIntegrationIdentity(contract, pull, canonical); err != nil {
+		t.Fatal(err)
+	}
+	mutations := map[string]func(*commitResponse){
+		"sha":          func(value *commitResponse) { value.SHA = strings.Repeat("e", 40) },
+		"parent base":  func(value *commitResponse) { value.Parents[0].SHA = strings.Repeat("e", 40) },
+		"parent head":  func(value *commitResponse) { value.Parents[1].SHA = strings.Repeat("e", 40) },
+		"tree":         func(value *commitResponse) { value.Commit.Tree.SHA = "invalid" },
+		"signer login": func(value *commitResponse) { value.Committer.Login = contract.OwnerLogin },
+		"signer id":    func(value *commitResponse) { value.Committer.ID++ },
+		"signer node":  func(value *commitResponse) { value.Committer.NodeID = "substituted" },
+		"signer type":  func(value *commitResponse) { value.Committer.Type = "Bot" },
+	}
+	for name, mutate := range mutations {
+		name, mutate := name, mutate
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			candidate := canonical
+			candidate.Parents = append([]apiRef(nil), canonical.Parents...)
+			mutate(&candidate)
+			if reflect.DeepEqual(candidate, canonical) {
+				t.Fatal("negative fixture did not change the candidate")
+			}
+			if err := validateIntegrationIdentity(contract, pull, candidate); err == nil {
+				t.Fatal("mutated integration identity was accepted")
+			}
+		})
+	}
+	// The author is deliberately not the integration signer trust decision.
+	candidate := canonical
+	candidate.Author = apiActor{Login: "untrusted-display-name"}
+	if err := validateIntegrationIdentity(contract, pull, candidate); err != nil {
+		t.Fatalf("author string incorrectly became integration trust: %v", err)
 	}
 }
 
