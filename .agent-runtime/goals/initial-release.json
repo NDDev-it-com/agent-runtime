@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 14,
+  "revision": 16,
   "goal": {
     "id": "initial-release",
     "intent": "Deliver a public, initial release-ready agent-runtime with bounded Task execution and durable contract-enforced Goals",
@@ -82,6 +82,16 @@
             "type": "commit",
             "reference": "commit:feat: establish Task and Goal runtime contracts",
             "result": "Initial standalone repository commit contains all implementation, tests, schemas and public documentation."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31659138001/job/94320054035",
+            "result": "This remote failure proves the original closure was premature and invalid as release closure; corrected by the linked release-ci-correction Goal."
+          },
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/1",
+            "result": "Corrective signed PR merged with full green PR checks and exact post-merge verification; canonical correction is .agent-runtime/goals/release-ci-correction.json."
           }
         ],
         "recorded_at": "2026-08-13T01:52:09.471526Z",
@@ -197,6 +207,6 @@
       }
     },
     "created_at": "2026-08-13T01:40:50.232106Z",
-    "updated_at": "2026-08-13T01:52:09.471526Z"
+    "updated_at": "2026-08-13T02:04:46.50807Z"
   }
 }
