@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -144,6 +145,46 @@ type commitPull struct {
 	Number int `json:"number"`
 }
 
+type graphPullResponse struct {
+	Data struct {
+		Repository struct {
+			ID         string `json:"id"`
+			DatabaseID int64  `json:"databaseId"`
+			Pull       struct {
+				ID         string    `json:"id"`
+				DatabaseID int64     `json:"databaseId"`
+				Number     int       `json:"number"`
+				State      string    `json:"state"`
+				Merged     bool      `json:"merged"`
+				MergedAt   time.Time `json:"mergedAt"`
+				BaseRef    string    `json:"baseRefName"`
+				BaseOID    string    `json:"baseRefOid"`
+				HeadRef    string    `json:"headRefName"`
+				HeadOID    string    `json:"headRefOid"`
+				MergedBy   struct {
+					Login      string `json:"login"`
+					ID         string `json:"id"`
+					DatabaseID int64  `json:"databaseId"`
+				} `json:"mergedBy"`
+				MergeCommit struct {
+					OID  string `json:"oid"`
+					Tree struct {
+						OID string `json:"oid"`
+					} `json:"tree"`
+					Parents struct {
+						Nodes []struct {
+							OID string `json:"oid"`
+						} `json:"nodes"`
+					} `json:"parents"`
+				} `json:"mergeCommit"`
+			} `json:"pullRequest"`
+		} `json:"repository"`
+	} `json:"data"`
+	Errors []struct {
+		Message string `json:"message"`
+	} `json:"errors"`
+}
+
 func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, error) {
 	if err := request.Contract.Validate(); err != nil {
 		return Result{}, err
@@ -170,28 +211,15 @@ func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, erro
 			return errors.New("GitHub API redirects are forbidden")
 		}}
 	}
-	if request.PullRequest == 0 {
-		var pulls []commitPull
-		if err := client.get(ctx, "/repos/"+client.repository+"/commits/"+request.CommitSHA+"/pulls", &pulls); err != nil {
-			return Result{}, err
-		}
-		if len(pulls) != 1 || pulls[0].Number < 1 {
-			return Result{}, errors.New("integration commit must map to exactly one PR")
-		}
-		request.PullRequest = pulls[0].Number
-	}
-	var pull pullResponse
-	if err := client.get(ctx, fmt.Sprintf("/repos/%s/pulls/%d", client.repository, request.PullRequest), &pull); err != nil {
-		return Result{}, err
-	}
-	if err := validatePullIdentity(request.Contract, request, pull); err != nil {
+	pull, graph, err := selectIntegrationPull(ctx, client, request)
+	if err != nil {
 		return Result{}, err
 	}
 	var integration commitResponse
 	if err := client.get(ctx, "/repos/"+client.repository+"/commits/"+request.CommitSHA, &integration); err != nil {
 		return Result{}, err
 	}
-	if err := validateIntegrationIdentity(request.Contract, pull, integration); err != nil {
+	if err := validateIntegrationIdentity(request.Contract, pull, graph, integration); err != nil {
 		return Result{}, err
 	}
 	localPayload, localSignature, err := readSignedCommit(ctx, root, request.CommitSHA)
@@ -234,12 +262,16 @@ func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, erro
 	return Result{IntegrationSHA: integration.SHA, BaseSHA: pull.Base.SHA, HeadSHA: pull.Head.SHA, TreeSHA: integration.Commit.Tree.SHA, PullRequest: pull.Number, SourceCommits: sources, CheckRuns: checks, CheckSuites: suites}, nil
 }
 
-func validateIntegrationIdentity(contract Contract, pull pullResponse, commit commitResponse) error {
+func validateIntegrationIdentity(contract Contract, pull pullResponse, graph graphPullResponse, commit commitResponse) error {
 	if contract.MergeMethod != "merge" {
 		return errors.New("integration contract does not require a two-parent merge")
 	}
 	if commit.SHA != pull.MergeCommitSHA || len(commit.Parents) != 2 || commit.Parents[0].SHA != pull.Base.SHA || commit.Parents[1].SHA != pull.Head.SHA || !fullSHA.MatchString(commit.Commit.Tree.SHA) {
 		return errors.New("integration SHA, parent order, PR base/head, or tree identity differs")
+	}
+	relation := graph.Data.Repository.Pull.MergeCommit
+	if relation.OID != commit.SHA || relation.Tree.OID != commit.Commit.Tree.SHA || len(relation.Parents.Nodes) != 2 || relation.Parents.Nodes[0].OID != commit.Parents[0].SHA || relation.Parents.Nodes[1].OID != commit.Parents[1].SHA {
+		return errors.New("GraphQL PR integration relation differs from the REST and local commit graph")
 	}
 	if commit.Committer.Login != contract.IntegrationSignerLogin || commit.Committer.ID != contract.IntegrationSignerDatabaseID || commit.Committer.NodeID != contract.IntegrationSignerNodeID || commit.Committer.Type != "User" {
 		return errors.New("integration signer account identity differs from the pinned provider role")
@@ -256,7 +288,7 @@ func validatePullIdentity(contract Contract, request VerifyRequest, pull pullRes
 		{pull.Number == request.PullRequest, "pull_request.number"},
 		{pull.State == "closed" && pull.Merged, "pull_request.state"},
 		{!pull.MergedAt.IsZero(), "pull_request.merged_at"},
-		{pull.MergeCommitSHA == request.CommitSHA, "pull_request.merge_commit_sha"},
+		{fullSHA.MatchString(pull.MergeCommitSHA), "pull_request.merge_commit_sha"},
 		{pull.MergedBy.Login == contract.OwnerLogin && pull.MergedBy.ID == contract.OwnerDatabaseID && pull.MergedBy.NodeID == contract.OwnerNodeID && pull.MergedBy.Type == "User", "pull_request.merged_by"},
 		{pull.Base.Ref == "main" && fullSHA.MatchString(pull.Base.SHA), "pull_request.base"},
 		{pull.Head.Ref != "" && fullSHA.MatchString(pull.Head.SHA), "pull_request.head"},
@@ -267,6 +299,91 @@ func validatePullIdentity(contract Contract, request VerifyRequest, pull pullRes
 	for _, check := range checks {
 		if !check.valid {
 			return fmt.Errorf("integration provenance field %s is invalid", check.field)
+		}
+	}
+	return nil
+}
+
+func selectIntegrationPull(ctx context.Context, client githubClient, request VerifyRequest) (pullResponse, graphPullResponse, error) {
+	candidates := []commitPull{{Number: request.PullRequest}}
+	if request.PullRequest == 0 {
+		if err := client.get(ctx, "/repos/"+client.repository+"/commits/"+request.CommitSHA+"/pulls", &candidates); err != nil {
+			return pullResponse{}, graphPullResponse{}, err
+		}
+	}
+	if len(candidates) == 0 || len(candidates) > 32 {
+		return pullResponse{}, graphPullResponse{}, errors.New("integration PR candidate set is missing or exceeds the bound")
+	}
+	type match struct {
+		pull  pullResponse
+		graph graphPullResponse
+	}
+	matches := make([]match, 0, 1)
+	rejections := make([]string, 0, len(candidates))
+	seen := make(map[int]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		if candidate.Number < 1 {
+			rejections = append(rejections, "invalid-number")
+			continue
+		}
+		if _, duplicate := seen[candidate.Number]; duplicate {
+			return pullResponse{}, graphPullResponse{}, fmt.Errorf("integration PR candidate %d is duplicated", candidate.Number)
+		}
+		seen[candidate.Number] = struct{}{}
+		var pull pullResponse
+		if err := client.get(ctx, fmt.Sprintf("/repos/%s/pulls/%d", client.repository, candidate.Number), &pull); err != nil {
+			return pullResponse{}, graphPullResponse{}, err
+		}
+		candidateRequest := request
+		candidateRequest.PullRequest = candidate.Number
+		if err := validatePullIdentity(request.Contract, candidateRequest, pull); err != nil {
+			rejections = append(rejections, fmt.Sprintf("pr-%d:%s", candidate.Number, err))
+			continue
+		}
+		graph, err := client.graphPull(ctx, candidate.Number)
+		if err != nil {
+			return pullResponse{}, graphPullResponse{}, err
+		}
+		if err := validateGraphPullIdentity(request.Contract, candidateRequest, pull, graph); err != nil {
+			rejections = append(rejections, fmt.Sprintf("pr-%d:%s", candidate.Number, err))
+			continue
+		}
+		// GraphQL mergeCommit is the authoritative post-merge relation. Normalize
+		// the stateful REST merge_commit_sha only after the independent relation
+		// has bound this PR to the exact requested integration commit.
+		pull.MergeCommitSHA = graph.Data.Repository.Pull.MergeCommit.OID
+		matches = append(matches, match{pull: pull, graph: graph})
+	}
+	if len(matches) != 1 {
+		sort.Strings(rejections)
+		return pullResponse{}, graphPullResponse{}, fmt.Errorf("integration commit has %d uniquely attributable PRs; candidates=%d rejections=%s", len(matches), len(candidates), strings.Join(rejections, ";"))
+	}
+	return matches[0].pull, matches[0].graph, nil
+}
+
+func validateGraphPullIdentity(contract Contract, request VerifyRequest, rest pullResponse, graph graphPullResponse) error {
+	if len(graph.Errors) != 0 {
+		return errors.New("GraphQL integration evidence contains errors")
+	}
+	repository := graph.Data.Repository
+	pull := repository.Pull
+	checks := []struct {
+		valid bool
+		field string
+	}{
+		{repository.ID == contract.RepositoryNodeID && repository.DatabaseID == contract.RepositoryDatabaseID, "repository"},
+		{pull.ID == rest.NodeID && pull.DatabaseID == rest.ID && pull.Number == rest.Number, "pull_request.identity"},
+		{pull.State == "MERGED" && pull.Merged && pull.MergedAt.Equal(rest.MergedAt), "pull_request.state"},
+		{pull.MergedBy.Login == contract.OwnerLogin && pull.MergedBy.ID == contract.OwnerNodeID && pull.MergedBy.DatabaseID == contract.OwnerDatabaseID, "pull_request.merged_by"},
+		{pull.BaseRef == rest.Base.Ref && pull.BaseOID == rest.Base.SHA, "pull_request.base"},
+		{pull.HeadRef == rest.Head.Ref && pull.HeadOID == rest.Head.SHA, "pull_request.head"},
+		{pull.MergeCommit.OID == request.CommitSHA, "pull_request.merge_commit"},
+		{fullSHA.MatchString(pull.MergeCommit.Tree.OID), "pull_request.merge_tree"},
+		{len(pull.MergeCommit.Parents.Nodes) == 2 && pull.MergeCommit.Parents.Nodes[0].OID == rest.Base.SHA && pull.MergeCommit.Parents.Nodes[1].OID == rest.Head.SHA, "pull_request.merge_parents"},
+	}
+	for _, check := range checks {
+		if !check.valid {
+			return fmt.Errorf("GraphQL integration provenance field %s is invalid", check.field)
 		}
 	}
 	return nil
@@ -432,21 +549,45 @@ func verifyOpenPGP(root string, contract Contract, payload, signature []byte, at
 }
 
 func (client githubClient) get(ctx context.Context, path string, output any) error {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, client.base+path, nil)
+	return client.doJSON(ctx, http.MethodGet, path, nil, output)
+}
+
+func (client githubClient) graphPull(ctx context.Context, number int) (graphPullResponse, error) {
+	parts := strings.Split(client.repository, "/")
+	if len(parts) != 2 || number < 1 {
+		return graphPullResponse{}, errors.New("GraphQL PR request identity is invalid")
+	}
+	const query = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){id databaseId pullRequest(number:$number){id databaseId number state merged mergedAt baseRefName baseRefOid headRefName headRefOid mergedBy{login ... on User{id databaseId}} mergeCommit{oid tree{oid} parents(first:3){nodes{oid}}}}}}`
+	body, err := json.Marshal(map[string]any{"query": query, "variables": map[string]any{"owner": parts[0], "name": parts[1], "number": number}})
+	if err != nil {
+		return graphPullResponse{}, err
+	}
+	var response graphPullResponse
+	if err := client.doJSON(ctx, http.MethodPost, "/graphql", bytes.NewReader(body), &response); err != nil {
+		return graphPullResponse{}, err
+	}
+	return response, nil
+}
+
+func (client githubClient) doJSON(ctx context.Context, method, path string, body io.Reader, output any) error {
+	request, err := http.NewRequestWithContext(ctx, method, client.base+path, body)
 	if err != nil {
 		return err
 	}
 	request.Header.Set("Accept", "application/vnd.github+json")
+	if body != nil {
+		request.Header.Set("Content-Type", "application/json")
+	}
 	request.Header.Set("Authorization", "Bearer "+client.token)
 	request.Header.Set("X-GitHub-Api-Version", "2026-03-10")
 	response, err := client.http.Do(request)
 	if err != nil {
-		return fmt.Errorf("GitHub API GET %s: %w", path, err)
+		return fmt.Errorf("GitHub API %s %s: %w", method, path, err)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK {
 		io.Copy(io.Discard, io.LimitReader(response.Body, maxAPIBytes))
-		return fmt.Errorf("GitHub API GET %s returned %s", path, response.Status)
+		return fmt.Errorf("GitHub API %s %s returned %s", method, path, response.Status)
 	}
 	data, err := io.ReadAll(io.LimitReader(response.Body, maxAPIBytes+1))
 	if err != nil {

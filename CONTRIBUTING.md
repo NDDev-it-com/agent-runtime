@@ -7,6 +7,7 @@ Development requires Go 1.24 or newer. Before submitting a pull request, run:
 
 ```sh
 go test -race ./...
+go run ./cmd/check-fuzz
 go vet ./...
 go build ./cmd/agent-runtime
 go run ./cmd/check-ci-contract

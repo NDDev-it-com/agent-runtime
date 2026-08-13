@@ -20,5 +20,29 @@
     "committer": {"login": "web-flow", "id": 19864447, "node_id": "MDQ6VXNlcjE5ODY0NDQ3", "type": "User"},
     "parents": [{"sha": "2d7afa228666ff536a072717270b5f63b418efb7"}, {"sha": "69bd546df7fce115768f20ee341630bdbe91390a"}],
     "commit": {"tree": {"sha": "e708fa4e26586e307186ec711e2bb1de9c44603b"}}
+  },
+  "graphql_relation": {
+    "data": {"repository": {
+      "id": "R_kgDOT22ecg",
+      "databaseId": 1332584050,
+      "pullRequest": {
+        "id": "PR_kwDOT22ecs7-qalx",
+        "databaseId": 4272531825,
+        "number": 11,
+        "state": "MERGED",
+        "merged": true,
+        "mergedAt": "2026-08-13T15:35:29Z",
+        "baseRefName": "main",
+        "baseRefOid": "2d7afa228666ff536a072717270b5f63b418efb7",
+        "headRefName": "fix/provenance-graph",
+        "headRefOid": "69bd546df7fce115768f20ee341630bdbe91390a",
+        "mergedBy": {"login": "rldyourmnd", "id": "U_kgDOBiELJg", "databaseId": 102828838},
+        "mergeCommit": {
+          "oid": "36d95405d7f237181a483c4effaacb3ec7b589a9",
+          "tree": {"oid": "e708fa4e26586e307186ec711e2bb1de9c44603b"},
+          "parents": {"nodes": [{"oid": "2d7afa228666ff536a072717270b5f63b418efb7"}, {"oid": "69bd546df7fce115768f20ee341630bdbe91390a"}]}
+        }
+      }
+    }}
   }
 }

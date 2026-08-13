@@ -49,9 +49,22 @@ func TestRejectsUnpatchedSecurityLane(t *testing.T) {
 		t.Fatalf("error=%v", err)
 	}
 }
+func TestRejectsMissingOrDuplicatedCanonicalFuzzGate(t *testing.T) {
+	t.Parallel()
+	c := testContract()
+	canonical := "go run ./cmd/check-fuzz"
+	for name, workflow := range map[string]string{
+		"missing":   strings.Replace(testWorkflow("1.26.5"), canonical, "go test ./...", 1),
+		"duplicate": testWorkflow("1.26.5") + canonical + "\n",
+	} {
+		if err := VerifyWorkflow(c, []byte(workflow)); err == nil || !strings.Contains(err.Error(), "fuzz verifier") {
+			t.Errorf("%s error=%v", name, err)
+		}
+	}
+}
 func testContract() Contract {
 	return Contract{SchemaVersion: "v1alpha1", License: "AGPL-3.0-only", Govulncheck: Tool{Module: "golang.org/x/vuln/cmd/govulncheck", Version: "v1.6.0", MinimumGo: "1.25.0", UpstreamGoMod: "https://github.com/golang/vuln/blob/v1.6.0/go.mod"}, SecurityGo: "1.26.5", CompatibilityGo: "1.24"}
 }
 func testWorkflow(scanner string) string {
-	return "env:\n  GOTOOLCHAIN: local\njobs:\n  test:\n    go-version: '1.24.x'\n  govulncheck:\n    go-version: '" + scanner + "'\n    summary: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    version: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    run: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n"
+	return "env:\n  GOTOOLCHAIN: local\njobs:\n  test:\n    go-version: '1.24.x'\n    run: go run ./cmd/check-fuzz\n  govulncheck:\n    go-version: '" + scanner + "'\n    summary: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    version: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    run: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n"
 }
