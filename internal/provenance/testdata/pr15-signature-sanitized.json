@@ -1,0 +1,19 @@
+{
+  "x_license": "AGPL-3.0-only",
+  "sha": "aee9e412ef162fa5d203de21340aef7e6921d34f",
+  "tree": "be5072dacb8676f99b9f1ebc746ef30a2555edb1",
+  "parents": ["a774023cb94b2aba0af8ea87d339e770aed49940", "b5014c22a00ff79132567a07828c880ee5542b3e"],
+  "author": {"name": "Danil Silantyev", "email": "danilsilantyevwork@gmail.com", "date": "2026-08-13T17:33:45Z"},
+  "committer": {"name": "GitHub", "email": "noreply@github.com", "date": "2026-08-13T17:33:45Z"},
+  "verification": {
+    "verified": true,
+    "reason": "valid",
+    "verified_at": "2026-08-13T17:33:50Z",
+    "payload_bytes": 398,
+    "payload_sha256": "a7c3fcb911894a0bd71cf2243f9b1633f0999b6f16d69c0635f4cf96dcb470d9",
+    "signature_bytes": 801,
+    "signature_sha256": "ef9c4d091a3fe5ae5189bc22fd127dd6e78b4c26087a39d6db5e380ffb3e2974",
+    "local_raw_commit_bytes": 1223,
+    "local_raw_commit_sha256": "6173ccc2a78783d1c8b5d366a8dca01ec4994b3d5e1c0b6fb484742b283c4528"
+  }
+}
