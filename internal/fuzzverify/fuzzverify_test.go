@@ -154,7 +154,7 @@ func testContract() Contract {
 func testModule(t *testing.T, targets []Target) string {
 	t.Helper()
 	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module github.com/NDDev-it-com/agent-runtime\n\ngo 1.24.0\n"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module github.com/NDDev-it-com/agent-runtime\n\ngo 1.25.0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	for _, target := range targets {

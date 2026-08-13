@@ -25,7 +25,8 @@ protocol, scheduler, or operating-system sandbox.
 
 ## Quick start
 
-Requires Go 1.24 or newer.
+Requires Go 1.25.0 or newer. CI exercises the minimum Go 1.25 lane and the
+pinned Go 1.26.5 security lane with automatic toolchain downloads disabled.
 
 ```sh
 go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.0

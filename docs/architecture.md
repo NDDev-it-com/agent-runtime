@@ -41,12 +41,15 @@ and is not claimed by v0.
 ## CI toolchain contract
 
 `security-tools.json` is the source of truth for the pinned vulnerability
-scanner, its upstream-declared minimum Go version, and the production
-compatibility lane. `cmd/check-ci-contract` verifies the workflow projection.
-Negative tests reject a scanner lane below the upstream requirement and reject
-movement of the Go 1.24 compatibility lane. CI disables automatic toolchain
-downloads with `GOTOOLCHAIN=local` and records both tool versions in the job
-summary.
+scanner, its upstream-declared minimum Go version, the exact Go 1.26.5 security
+toolchain archive identity, and the production compatibility lane.
+`cmd/check-ci-contract` verifies the workflow projection. Negative tests reject
+a scanner lane below the upstream requirement, movement of the Go 1.25
+compatibility lane, an incomplete current-security lane, or drift in the pinned
+archive identity. CI disables automatic toolchain downloads with
+`GOTOOLCHAIN=local`; the Go 1.25 lane proves the public minimum while the Go
+1.26.5 lane reruns module, build, test, release-contract, and vulnerability
+checks under the patched current toolchain.
 
 Closure is structurally distinct from an ordinary phase receipt. It records the
 achieved outcome, cleanup, typed remaining debt/risks, and canonical next work.
