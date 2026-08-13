@@ -49,8 +49,10 @@ covers every other asset and deliberately does not checksum itself.
    pre-merge check runs remain bound to the exact integration commit.
    REST commit associations discover a bounded candidate set only. Exactly one
    candidate must independently match GitHub's GraphQL merged-PR commit, tree
-   and ordered-parent relation plus the REST/local signed commit; stateful REST
-   test-merge SHAs are never used as final integration authority. Missing,
+   and ordered-parent relation plus the REST/local signed commit. The REST
+   pull request `merge_commit_sha` is stateful across open/merged state and
+   merge methods, so it is retained only as diagnostic API evidence and is
+   never normalized, compared, or used as integration authority. Missing,
    duplicate, ambiguous, indirect, squash and rebase relations fail closed.
    Integration verification is native Go on Linux and macOS. Its sole provider
    public key, fingerprint, byte digest, active status and reviewed-change-only
