@@ -7,6 +7,6 @@
     "minimum_go": "1.25.0",
     "upstream_go_mod": "https://github.com/golang/vuln/blob/v1.6.0/go.mod"
   },
-  "security_go": "1.26.5",
+  "security_go": "1.26.6",
   "compatibility_go": "1.24"
 }
