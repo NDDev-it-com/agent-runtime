@@ -6,6 +6,12 @@ contract.
 
 ## [Unreleased]
 
+### Fixed
+
+- The quick start no longer instructs `go install ...@v0.1.0`. The repository has
+  no tag and no GitHub release, so that command failed for every reader; it now
+  installs from `@main` and says plainly that no version has been published.
+
 ## [0.1.0] - 2026-08-13
 
 ### Added
