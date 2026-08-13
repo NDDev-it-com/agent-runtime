@@ -100,8 +100,26 @@ func TestRepositoryUsesCanonicalModuleVerifier(t *testing.T) {
 		t.Fatal(err)
 	}
 	canonical := "go run ./cmd/check-module-tidy"
-	if strings.Count(string(workflow), canonical) != 1 {
-		t.Fatalf("CI must invoke the canonical module verifier exactly once")
+	// The invariant is per lane, not per file. Counting across the whole workflow
+	// encoded a single-lane CI topology and rejected any second lane that proves
+	// the same module closure, which is a legitimate thing for CI to do.
+	jobs := workflowJobBodies(t, string(workflow))
+	proving, inJobs := 0, 0
+	for _, job := range jobs {
+		count := strings.Count(job.body, canonical)
+		if count > 1 {
+			t.Errorf("CI job %q invokes the canonical module verifier %d times; a lane proves the closure once", job.name, count)
+		}
+		if count == 1 {
+			proving++
+		}
+		inJobs += count
+	}
+	if proving == 0 {
+		t.Fatal("no CI job invokes the canonical module verifier")
+	}
+	if total := strings.Count(string(workflow), canonical); total != inJobs {
+		t.Fatalf("CI invokes the canonical module verifier %d times but only %d inside a job", total, inJobs)
 	}
 	if strings.Count(string(documentation), canonical) != 1 {
 		t.Fatalf("release documentation must name the canonical module verifier exactly once")
@@ -186,4 +204,90 @@ func readModuleFiles(t *testing.T, root string) map[string][]byte {
 
 func ioWriteString(writer interface{ Write([]byte) (int, error) }, value string) (int, error) {
 	return writer.Write([]byte(value))
+}
+
+type workflowJob struct {
+	name string
+	body string
+}
+
+// workflowJobBodies splits the jobs mapping of a GitHub Actions workflow into one
+// body per job. It relies only on the two-space job indentation the repository's
+// workflows use, which the CI contract already depends on elsewhere.
+func workflowJobBodies(t *testing.T, workflow string) []workflowJob {
+	t.Helper()
+	lines := strings.Split(strings.ReplaceAll(workflow, "\r\n", "\n"), "\n")
+	start := -1
+	for index, line := range lines {
+		if line == "jobs:" {
+			if start >= 0 {
+				t.Fatal("workflow declares jobs twice")
+			}
+			start = index
+		}
+	}
+	if start < 0 {
+		t.Fatal("workflow declares no jobs")
+	}
+	var jobs []workflowJob
+	for index := start + 1; index < len(lines); index++ {
+		line := lines[index]
+		if trimmed := strings.TrimSpace(line); trimmed == "" || strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		indent := len(line) - len(strings.TrimLeft(line, " "))
+		if indent == 0 {
+			break
+		}
+		if indent != 2 || !strings.HasSuffix(strings.TrimSpace(line), ":") {
+			if len(jobs) > 0 {
+				jobs[len(jobs)-1].body += line + "\n"
+			}
+			continue
+		}
+		jobs = append(jobs, workflowJob{name: strings.TrimSuffix(strings.TrimSpace(line), ":")})
+	}
+	if len(jobs) == 0 {
+		t.Fatal("workflow jobs mapping is empty")
+	}
+	return jobs
+}
+
+func TestCanonicalModuleVerifierInvariantIsPerLane(t *testing.T) {
+	t.Parallel()
+	canonical := "go run ./cmd/check-module-tidy"
+	workflow := func(test, security string) string {
+		return "name: CI\n\non:\n  pull_request:\n\njobs:\n  test:\n    runs-on: ubuntu-latest\n    steps:\n" + test + "  govulncheck:\n    runs-on: ubuntu-latest\n    steps:\n" + security
+	}
+	once := "      - run: " + canonical + "\n"
+	other := "      - run: go vet ./...\n"
+
+	single := workflowJobBodies(t, workflow(once, other))
+	if len(single) != 2 {
+		t.Fatalf("jobs=%d", len(single))
+	}
+	counts := map[string]int{}
+	for _, job := range single {
+		counts[job.name] = strings.Count(job.body, canonical)
+	}
+	if counts["test"] != 1 || counts["govulncheck"] != 0 {
+		t.Fatalf("single-lane counts=%v", counts)
+	}
+
+	// A second lane proving the same closure is legitimate; the previous
+	// whole-file count rejected it and blocked the Go 1.25 migration.
+	both := workflowJobBodies(t, workflow(once, once))
+	for _, job := range both {
+		if got := strings.Count(job.body, canonical); got != 1 {
+			t.Fatalf("job %q counted %d, want 1 per lane", job.name, got)
+		}
+	}
+
+	// Two invocations inside one lane remain a contract violation.
+	duplicated := workflowJobBodies(t, workflow(once+once, other))
+	for _, job := range duplicated {
+		if job.name == "test" && strings.Count(job.body, canonical) != 2 {
+			t.Fatalf("duplicate within a lane was not observed: %q", job.body)
+		}
+	}
 }

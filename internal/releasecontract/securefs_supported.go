@@ -125,10 +125,21 @@ type anchoredPath struct {
 	final    string
 }
 
+// assetFileMode and stageDirectoryMode are the exact modes the release contract
+// publishes and verifies. O_CREAT and mkdirat subtract the process umask from a
+// requested mode, so both are applied explicitly with fchmod, which the umask
+// does not affect. Without that, release output would depend on the shell that
+// built it and a host with umask 077 could not build at all.
+const (
+	assetFileMode      = 0o644
+	stageDirectoryMode = 0o700
+)
+
 type transactionOptions struct {
 	hook            func(string, *bundleTransaction) error
 	write           func(int, []byte) (int, error)
 	fsync           func(int) error
+	fchmod          func(int, uint32) error
 	close           func(closeRequest) error
 	renameNoReplace func(int, string, int, string) error
 	unlinkat        func(int, string, int) error
@@ -159,7 +170,7 @@ func (e *residualDebtError) Error() string {
 
 func defaultTransactionOptions() transactionOptions {
 	return transactionOptions{
-		write: unix.Write, fsync: unix.Fsync, close: func(request closeRequest) error { return request.closeUnderlying() },
+		write: unix.Write, fsync: unix.Fsync, fchmod: unix.Fchmod, close: func(request closeRequest) error { return request.closeUnderlying() },
 		renameNoReplace: atomicRenameNoReplace, unlinkat: unix.Unlinkat,
 	}
 }
@@ -171,6 +182,9 @@ func normalizeTransactionOptions(opts transactionOptions) transactionOptions {
 	}
 	if opts.fsync == nil {
 		opts.fsync = defaults.fsync
+	}
+	if opts.fchmod == nil {
+		opts.fchmod = defaults.fchmod
 	}
 	if opts.close == nil {
 		opts.close = defaults.close
@@ -349,7 +363,7 @@ func validateDirectoryMetadata(st unix.Stat_t, expected fileIdentity, role direc
 			return errors.New("caller-owned parent must be effective-UID-owned, owner-rwx, and not group/other writable")
 		}
 	case directoryRoleStage:
-		if uint32(st.Uid) != ownerUID || permissions != 0o700 {
+		if uint32(st.Uid) != ownerUID || permissions != stageDirectoryMode {
 			return errors.New("builder-owned stage must be effective-UID-owned mode-0700")
 		}
 	default:
@@ -584,7 +598,7 @@ func (tx *bundleTransaction) createStage() error {
 			return err
 		}
 		name := ".release-stage-" + hex.EncodeToString(random)
-		if err := unix.Mkdirat(tx.anchor.parentFD(), name, 0o700); errors.Is(err, unix.EEXIST) {
+		if err := unix.Mkdirat(tx.anchor.parentFD(), name, stageDirectoryMode); errors.Is(err, unix.EEXIST) {
 			continue
 		} else if err != nil {
 			return err
@@ -592,6 +606,9 @@ func (tx *bundleTransaction) createStage() error {
 		fd, err := unix.Openat(tx.anchor.parentFD(), name, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
 		if err != nil {
 			return orderedErrors(err, contextual("remove unopened stage", tx.opts.unlinkat(tx.anchor.parentFD(), name, unix.AT_REMOVEDIR)))
+		}
+		if err := tx.opts.fchmod(fd, stageDirectoryMode); err != nil {
+			return orderedErrors(err, closeRaw(fd, fdRoleStage, tx.opts, "close unowned stage"), contextual("remove unowned stage", tx.opts.unlinkat(tx.anchor.parentFD(), name, unix.AT_REMOVEDIR)))
 		}
 		id, err := identityForFD(fd)
 		if err != nil {
@@ -613,13 +630,19 @@ func (tx *bundleTransaction) writeAssets(c Contract, content map[string][]byte) 
 		if !ok {
 			return fmt.Errorf("missing asset %q", name)
 		}
-		fd, err := unix.Openat(tx.stage.handle(), name, unix.O_RDWR|unix.O_CLOEXEC|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW, 0o644)
+		fd, err := unix.Openat(tx.stage.handle(), name, unix.O_RDWR|unix.O_CLOEXEC|unix.O_CREAT|unix.O_EXCL|unix.O_NOFOLLOW, assetFileMode)
 		if err != nil {
 			return fmt.Errorf("create asset %q: %w", name, err)
 		}
+		// Set the mode before capturing identity, so the recorded identity describes
+		// the published artifact rather than whatever the umask happened to allow.
+		modeErr := tx.opts.fchmod(fd, assetFileMode)
 		id, idErr := identityForFD(fd)
-		record := &assetRecord{name: name, identity: id, parent: tx.stageIdentity, mode: 0o644, expected: int64(len(data)), state: assetOpened, fd: newFDOwner(fd, fdRoleAsset, "asset "+name)}
+		record := &assetRecord{name: name, identity: id, parent: tx.stageIdentity, mode: assetFileMode, expected: int64(len(data)), state: assetOpened, fd: newFDOwner(fd, fdRoleAsset, "asset "+name)}
 		tx.assetIDs[name] = record
+		if modeErr != nil {
+			return fmt.Errorf("set asset %q mode: %w", name, modeErr)
+		}
 		if idErr != nil {
 			return fmt.Errorf("identify asset %q: %w", name, idErr)
 		}
@@ -914,7 +937,7 @@ func readExactAssets(dirFD int, c Contract, opts transactionOptions) (map[string
 		if err = unix.Fstat(fd, &st); err != nil {
 			return nil, nil, orderedErrors(err, owner.closeOnce(opts, "close unverified asset "+name))
 		}
-		if fileType(st) != uint32(unix.S_IFREG) || filePermissions(st) != 0o644 || linkCount(st) != 1 || st.Size < 0 || st.Size > c.Limits.MaxTotalBytes {
+		if fileType(st) != uint32(unix.S_IFREG) || filePermissions(st) != assetFileMode || linkCount(st) != 1 || st.Size < 0 || st.Size > c.Limits.MaxTotalBytes {
 			return nil, nil, orderedErrors(fmt.Errorf("asset %q has unsafe metadata", name), owner.closeOnce(opts, "close unsafe asset "+name))
 		}
 		data := make([]byte, st.Size)

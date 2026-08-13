@@ -6,6 +6,28 @@ contract.
 
 ## [Unreleased]
 
+### Fixed
+
+- Release output no longer depends on the umask of the shell that built it.
+  `O_CREAT` and `mkdirat` subtract the process umask from a requested mode, so
+  under `umask 077` every published asset was created `0600`, failed the
+  builder's own exact-mode verification, and left residual state. The stage
+  directory and every asset now have their modes set explicitly with `fchmod`,
+  which the umask does not affect, and a bundle built under `umask 002`, `022`
+  and `077` is byte-for-byte identical.
+- The canonical module-verifier assertion is per CI lane rather than per file.
+  It counted invocations across the whole workflow, so a second lane proving the
+  same module closure — a legitimate CI topology — failed the check.
+- The test suite no longer depends on the developer's umask. Release output
+  fixtures and the JSONL permission fixture inherited it, so the same commit
+  passed under `umask 022` and failed under `002` or `077`. The whole module now
+  passes under `002`, `022`, `027` and `077`.
+
+### Removed
+
+- Unused `canonicalChecks` in the governance contract and the unused `commit`
+  parameter of the release SBOM builder.
+
 ## [0.1.0] - 2026-08-13
 
 ### Added
