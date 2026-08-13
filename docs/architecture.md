@@ -24,6 +24,16 @@ symlink traversal before files are read or a working directory is selected.
 `Runner` assembles the context in manifest order, creates a deadline derived
 from the caller context, passes context on standard input, constructs a fresh
 environment from the allowlist, and captures a bounded combined output stream.
+The context limit bounds each instruction read rather than the assembled result,
+so an oversized file is rejected from its metadata instead of after allocation.
+
+The manifest timeout and the caller's own deadline both surface as
+`context.DeadlineExceeded` on the derived context, so `Runner` attaches a
+cancellation cause and attributes the termination from it. `Result.TimedOut`
+means the manifest timeout elapsed and `Result.Cancelled` means the caller ended
+the run; the observability layer maps them to distinct typed error evidence, and
+delivers the terminal observation on a context detached from the caller's so
+cancelling the work does not also cancel the record of it.
 The CLI always emits the result when a process was started, including non-zero
 exit and timeout information, then exits non-zero when the run failed.
 
