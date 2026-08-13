@@ -73,6 +73,33 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	if strings.Count(text, "go run ./cmd/check-fuzz") != 1 {
 		return errors.New("workflow must invoke the canonical fuzz verifier exactly once")
 	}
+	if err := verifyReleaseReproductionCommand(text); err != nil {
+		return err
+	}
+	return nil
+}
+
+func verifyReleaseReproductionCommand(workflow string) error {
+	required := []string{
+		`parent="$(mktemp -d)"`,
+		`first="$parent/first"`,
+		`second="$parent/second"`,
+		`--out "$first"`,
+		`--out "$second"`,
+		`diff -rq "$first" "$second"`,
+	}
+	for _, token := range required {
+		token = strings.ReplaceAll(token, "\\\"", "\"")
+		if strings.Count(workflow, token) != 1 {
+			return fmt.Errorf("release reproduction command requires exactly one %q", token)
+		}
+	}
+	for _, forbidden := range []string{`mkdir "$first"`, `mkdir "$second"`, `mkdir -p "$first"`, `mkdir -p "$second"`} {
+		forbidden = strings.ReplaceAll(forbidden, "\\\"", "\"")
+		if strings.Contains(workflow, forbidden) {
+			return errors.New("release reproduction command must not pre-create final output leaves")
+		}
+	}
 	return nil
 }
 func jobGoVersion(workflow, job string) (string, error) {

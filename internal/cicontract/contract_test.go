@@ -62,9 +62,42 @@ func TestRejectsMissingOrDuplicatedCanonicalFuzzGate(t *testing.T) {
 		}
 	}
 }
+
+func TestReleaseReproductionCommandOwnsOnlyParent(t *testing.T) {
+	t.Parallel()
+	canonical := testWorkflow("1.26.5")
+	if err := VerifyWorkflow(testContract(), []byte(canonical)); err != nil {
+		t.Fatal(err)
+	}
+	for name, workflow := range map[string]string{
+		"missing second build": strings.Replace(canonical, `--out "$second"`, `--out "$first"`, 1),
+		"precreated first":     strings.Replace(canonical, `diff -rq "$first" "$second"`, "mkdir \"$first\"\n    diff -rq \"$first\" \"$second\"", 1),
+		"same destination":     strings.Replace(canonical, `second="$parent/second"`, `second="$parent/first"`, 1),
+		"missing comparison":   strings.Replace(canonical, `diff -rq "$first" "$second"`, "true", 1),
+	} {
+		if workflow == canonical {
+			switch name {
+			case "missing second build":
+				workflow = strings.Replace(canonical, "--out \"$second\"", "--out \"$first\"", 1)
+			case "precreated first":
+				workflow = strings.Replace(canonical, "diff -rq \"$first\" \"$second\"", "mkdir \"$first\"\n    diff -rq \"$first\" \"$second\"", 1)
+			case "same destination":
+				workflow = strings.Replace(canonical, "second=\"$parent/second\"", "second=\"$parent/first\"", 1)
+			case "missing comparison":
+				workflow = strings.Replace(canonical, "diff -rq \"$first\" \"$second\"", "true", 1)
+			}
+		}
+		if workflow == canonical {
+			t.Fatalf("%s negative fixture did not change the workflow", name)
+		}
+		if err := VerifyWorkflow(testContract(), []byte(workflow)); err == nil {
+			t.Errorf("%s reproduction drift accepted", name)
+		}
+	}
+}
 func testContract() Contract {
 	return Contract{SchemaVersion: "v1alpha1", License: "AGPL-3.0-only", Govulncheck: Tool{Module: "golang.org/x/vuln/cmd/govulncheck", Version: "v1.6.0", MinimumGo: "1.25.0", UpstreamGoMod: "https://github.com/golang/vuln/blob/v1.6.0/go.mod"}, SecurityGo: "1.26.5", CompatibilityGo: "1.24"}
 }
 func testWorkflow(scanner string) string {
-	return "env:\n  GOTOOLCHAIN: local\njobs:\n  test:\n    go-version: '1.24.x'\n    run: go run ./cmd/check-fuzz\n  govulncheck:\n    go-version: '" + scanner + "'\n    summary: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    version: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    run: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n"
+	return "env:\n  GOTOOLCHAIN: local\njobs:\n  test:\n    go-version: '1.24.x'\n    run: go run ./cmd/check-fuzz\n    reproduce: |\n      parent=\"$(mktemp -d)\"\n      first=\"$parent/first\"\n      second=\"$parent/second\"\n      go run ./cmd/check-release-contract --build --out \"$first\"\n      go run ./cmd/check-release-contract --build --out \"$second\"\n      diff -rq \"$first\" \"$second\"\n  govulncheck:\n    go-version: '" + scanner + "'\n    summary: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    version: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    run: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n"
 }
