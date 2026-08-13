@@ -37,6 +37,15 @@ func TestTaskCLIEndToEnd(t *testing.T) {
 	}
 }
 
+func TestExplicitReleaseVersionWins(t *testing.T) {
+	previous := version
+	version = "v0.1.0"
+	t.Cleanup(func() { version = previous })
+	if got := displayVersion(); got != "v0.1.0" {
+		t.Fatalf("version=%q", got)
+	}
+}
+
 func TestGoalCLIRestartAndCompletionGuard(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "goal.json")
 	var out, stderr bytes.Buffer

@@ -1,0 +1,29 @@
+{
+  "schema_version": "v1alpha1",
+  "invalid_paths": [
+    "../escape",
+    "a/../../escape",
+    "/absolute",
+    "C:/windows",
+    "C:\\windows",
+    "\\\\server\\share",
+    "./leading",
+    "a/./b",
+    "a/../b",
+    "a//b",
+    "trailing/",
+    ".",
+    "..",
+    ".git/config",
+    ".GIT/config",
+    "NUL.txt",
+    "dir/COM1",
+    "stream:name",
+    "trailing-dot.",
+    "trailing-space ",
+    "line\nbreak",
+    "nul\u0000byte",
+    "decomposed-e\u0301.txt"
+  ],
+  "unsafe_types": ["symlink", "hardlink", "char-device", "block-device", "fifo", "socket", "unknown"]
+}

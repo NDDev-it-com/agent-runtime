@@ -19,13 +19,18 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	task := readSchema(t, "schemas/task-manifest-v1alpha1.schema.json")
 	goal := readSchema(t, "schemas/goal-journal-v1alpha1.schema.json")
 	governance := readSchema(t, "schemas/repository-governance-v1alpha1.schema.json")
-	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance} {
+	releaseContract := readSchema(t, "schemas/release-contract-v1alpha1.schema.json")
+	releaseManifest := readSchema(t, "schemas/release-manifest-v1alpha1.schema.json")
+	for name, schema := range map[string]map[string]any{"task": task, "goal": goal, "governance": governance, "release contract": releaseContract, "release manifest": releaseManifest} {
 		if schema["x-license"] != "AGPL-3.0-only" {
 			t.Errorf("%s schema license=%v", name, schema["x-license"])
 		}
 	}
 	if governance["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != "v1alpha1" {
 		t.Fatal("repository governance schema version drift")
+	}
+	if releaseContract["properties"].(map[string]any)["version"].(map[string]any)["const"] != "v0.1.0" || releaseManifest["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != "v1alpha1" {
+		t.Fatal("release schema identity drift")
 	}
 	if task["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != TaskSchemaVersion {
 		t.Fatal("Task schema version drift")
@@ -60,6 +65,7 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 
 func TestGoSourcesCarrySPDXHeader(t *testing.T) {
 	t.Parallel()
+	var sources []string
 	err := filepath.Walk(".", func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -67,17 +73,32 @@ func TestGoSourcesCarrySPDXHeader(t *testing.T) {
 		if info.IsDir() || filepath.Ext(path) != ".go" {
 			return nil
 		}
-		data, err := os.ReadFile(path)
-		if err != nil {
-			return err
-		}
-		if !strings.HasPrefix(string(data), "// SPDX-License-Identifier: AGPL-3.0-only\n") {
-			t.Errorf("missing SPDX header: %s", path)
-		}
+		sources = append(sources, filepath.ToSlash(path))
 		return nil
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	sort.Strings(sources)
+	wantFixtures := []string{
+		"internal/releasecontract/testdata/ownership_migration_negative/darwin.go",
+		"internal/releasecontract/testdata/ownership_migration_negative/linux.go",
+	}
+	for _, fixture := range wantFixtures {
+		index := sort.SearchStrings(sources, fixture)
+		if index == len(sources) || sources[index] != fixture {
+			t.Errorf("fixture escaped repository Go source contract: %s", fixture)
+		}
+	}
+	for _, path := range sources {
+		data, err := os.ReadFile(path)
+		if err != nil {
+			t.Errorf("read Go source %s: %v", path, err)
+			continue
+		}
+		if !strings.HasPrefix(string(data), "// SPDX-License-Identifier: AGPL-3.0-only\n") {
+			t.Errorf("missing SPDX header: %s", path)
+		}
 	}
 }
 

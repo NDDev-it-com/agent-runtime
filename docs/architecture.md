@@ -89,6 +89,13 @@ fields may change before a stable `v1` contract, with changes documented in the
 changelog. Unknown fields are deliberately fatal so configuration errors cannot
 silently change runtime behavior.
 
+The release subsystem is deliberately separate from runtime execution. Its
+versioned contract drives one exact-commit source archive, SPDX source/dependency
+SBOM, canonical notes, manifest and checksum set. The builder reads Git objects
+rather than the worktree and normalizes archive metadata. PR/main validation is
+read-only; only a verified signed exact-main tag can enter the isolated
+OIDC-attested publication job.
+
 ## Explicit non-goals for v0
 
 - model-provider or tool-protocol integrations;

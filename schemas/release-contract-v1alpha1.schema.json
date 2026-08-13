@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/NDDev-it-com/agent-runtime/schemas/release-contract-v1alpha1.schema.json",
+  "x-license": "AGPL-3.0-only",
+  "title": "agent-runtime release contract v1alpha1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "version", "module_path", "go_compatibility", "license", "dependencies", "source_commit", "archive_prefix", "workflow", "allowed_signers", "assets", "limits", "actions"],
+  "properties": {
+    "schema_version": {"const": "v1alpha1"},
+    "version": {"const": "v0.1.0"},
+    "module_path": {"const": "github.com/NDDev-it-com/agent-runtime"},
+    "go_compatibility": {"const": "1.24"},
+    "license": {"const": "AGPL-3.0-only"},
+    "dependencies": {"type": "array", "minItems": 2, "maxItems": 2, "prefixItems": [
+      {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"const": "golang.org/x/mod"}, "version": {"const": "v0.27.0"}, "license": {"const": "BSD-3-Clause"}}},
+      {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"const": "golang.org/x/sys"}, "version": {"const": "v0.40.0"}, "license": {"const": "BSD-3-Clause"}}}
+    ], "items": false},
+    "source_commit": {"const": "HEAD"},
+    "archive_prefix": {"const": "agent-runtime-v0.1.0/"},
+    "workflow": {"const": ".github/workflows/release.yml"},
+    "allowed_signers": {"const": ".github/release-allowed-signers"},
+    "assets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["archive", "sbom", "notes", "manifest", "checksums"],
+      "properties": {
+        "archive": {"const": "agent-runtime-v0.1.0-source.tar.gz"},
+        "sbom": {"const": "agent-runtime-v0.1.0.spdx.json"},
+        "notes": {"const": "release-notes-v0.1.0.md"},
+        "manifest": {"const": "release-manifest-v0.1.0.json"},
+        "checksums": {"const": "SHA256SUMS"}
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_files", "max_file_bytes", "max_total_bytes", "max_path_bytes"],
+      "properties": {
+        "max_files": {"type": "integer", "minimum": 1, "maximum": 10000},
+        "max_file_bytes": {"type": "integer", "minimum": 1, "maximum": 67108864},
+        "max_total_bytes": {"type": "integer", "minimum": 1, "maximum": 268435456},
+        "max_path_bytes": {"type": "integer", "minimum": 64, "maximum": 4096}
+      }
+    },
+    "actions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["checkout", "setup_go", "attest_provenance", "attest_sbom"],
+      "properties": {
+        "checkout": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$"},
+        "setup_go": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$"},
+        "attest_provenance": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$"},
+        "attest_sbom": {"type": "string", "pattern": "^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$"}
+      }
+    }
+  }
+}

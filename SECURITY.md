@@ -24,6 +24,14 @@ Avoid placing secrets in manifests, instructions, command arguments, logs, or
 issue reports. Captured command output may contain sensitive data and should be
 handled accordingly by callers.
 
+## Release integrity
+
+Official releases originate only from annotated signed `vMAJOR.MINOR.PATCH`
+tags on the exact current `main` commit. Verify downloaded assets against
+`SHA256SUMS`, inspect the SPDX JSON and release manifest, and run
+`gh attestation verify <asset> -R NDDev-it-com/agent-runtime`. Release assets
+and tags are append-only; a correction is a new version, never a rewritten tag.
+
 Goal journals may contain repository paths, command names, issue references, and
 review findings. Receipts must reference evidence without embedding credentials
 or sensitive output. Journal paths are caller-controlled and are not workspace

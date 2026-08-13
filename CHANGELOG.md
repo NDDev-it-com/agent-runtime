@@ -6,26 +6,6 @@ contract.
 
 ## [Unreleased]
 
-### Added
-
-- Versioned, fail-closed repository governance contract and validator for
-  PR-only main changes, strict exact CI/CodeQL checks, zero approvals, and
-  auto-merge-compatible settings.
-- Provider-neutral immutable `v1alpha1` lifecycle envelopes for Task, Goal, and
-  Brain/Orchestrator/Dispatcher/Worker handoff observations.
-- Fail-closed typed redaction with nested structure, cycle, formatter, unsafe
-  value, Unicode/binary, depth, collection, string, attribute, stream, envelope,
-  replay, and file bounds.
-- Composable synchronous sinks, bounded memory and durable JSONL implementations,
-  delivery reports, retry/idempotency/replay semantics, and Task/Goal adapters.
-- Event JSON Schema, documentation, and deep race/fuzz/leak/restart/concurrency/
-  failure tests.
-
-### Changed
-
-- Task manifests expose additive `Prepare` validation so observers distinguish
-  validation failure from execution without changing Runner behavior.
-
 ## [0.1.0] - 2026-08-13
 
 ### Added
@@ -42,6 +22,25 @@ contract.
   checks against the canonical sibling license text when available.
 - Checked CI security-tool contract that preserves Go 1.24 library compatibility
   while running pinned `govulncheck` v1.6.0 under its required Go 1.25 toolchain.
+- Versioned, fail-closed repository governance contract and validator for
+  PR-only main changes, strict exact CI/CodeQL checks, zero approvals, and
+  auto-merge-compatible settings.
+- Provider-neutral immutable `v1alpha1` lifecycle envelopes for Task, Goal, and
+  Brain/Orchestrator/Dispatcher/Worker handoff observations.
+- Fail-closed typed redaction with nested structure, cycle, formatter, unsafe
+  value, Unicode/binary, depth, collection, string, attribute, stream, envelope,
+  replay, and file bounds.
+- Composable synchronous sinks, bounded memory and durable JSONL implementations,
+  delivery reports, retry/idempotency/replay semantics, and Task/Goal adapters.
+- Event JSON Schema, documentation, and deep race/fuzz/leak/restart/concurrency/
+  failure tests.
+- Deterministic source/module release contract with SPDX JSON, checksums,
+  machine-readable manifest, signed tags and keyless artifact attestations.
+
+### Changed
+
+- Task manifests expose additive `Prepare` validation so observers distinguish
+  validation failure from execution without changing Runner behavior.
 
 [Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.0
