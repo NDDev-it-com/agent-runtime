@@ -1,0 +1,158 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 12,
+  "goal": {
+    "id": "initial-release",
+    "intent": "Deliver a public, initial release-ready agent-runtime with bounded Task execution and durable contract-enforced Goals",
+    "acceptance": [
+      {
+        "id": "task-runtime",
+        "acceptance": "Task manifests validate and execute with workspace, environment, time, context, and output bounds",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "manifest, workspace, runner and CLI test suites plus examples/basic smoke",
+            "result": "Explicit acceptance, context/workspace/env/time/output bounds and structured result verified."
+          }
+        ]
+      },
+      {
+        "id": "goal-contract",
+        "acceptance": "Goal journal enforces all eight ordered phases, durable checklist, typed receipts, restart recovery, and guarded closure",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "goal/types_test.go; goal/store_test.go; cmd/agent-runtime/main_test.go",
+            "result": "All eight phases, living checklist, typed receipts/errors, atomic durability, restart recovery and negative completion guards verified."
+          }
+        ]
+      },
+      {
+        "id": "quality",
+        "acceptance": "Architecture, security, consistency, documentation, omission, and test reviews have recorded receipts",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "docs/architecture.md; SECURITY.md; README.md; schemas; self-review and omission receipts",
+            "result": "Architecture, security, API, naming, docs, failure, operability, maintenance and omission reviews reconciled with code."
+          }
+        ]
+      },
+      {
+        "id": "verification",
+        "acceptance": "All applicable static, race, vulnerability, CLI, schema, and release checks pass without false-green claims",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "verify phase independent gate evidence",
+            "result": "All applicable static, runtime, security, cross-platform build, schema, CLI and release checks passed independently."
+          }
+        ]
+      },
+      {
+        "id": "publication",
+        "acceptance": "Repository has a clean coherent initial commit on its own main branch and is ready for public release",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Implement model providers, tool protocols, or distributed scheduling in v0",
+      "Claim OS sandboxing or hostile-command isolation",
+      "Modify the parent GDS repository or sibling modules"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Asked what may have been forgotten and audited edge cases, TODOs, stale terminology, duplicated concepts, compatibility paths, dirty/branch/lock state, schemas, licenses, docs, configs and partial evidence. Findings fixed: coverage instrumentation made an exact helper-output assertion brittle; a compound verification command could return a later successful exit and mask that failure, so the assertion now checks the contractual substring and every verification gate is run independently. Ephemeral lock files are ignored. No TODO/FIXME, obsolete CLI alias, stale license text, generated projection drift or hidden compatibility path remains. The repository remains intentionally uncommitted at this phase; commit/publication acceptance stays pending.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "independent go test -race; coverage; vet; linux/darwin builds; govulncheck; CLI smoke; diff/license/terminology audits",
+            "result": "Audit exposed and corrected a false-green procedure and brittle test; subsequent independent gates passed. No residual TODOs or duplicated Task/Goal representations found."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:51:19.994713Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Implemented bounded Task execution with explicit acceptance plus durable Goal journal with eight ordered phases, living checklist, typed evidence/errors/debt, optimistic concurrency, file locking, atomic synced writes, restart restoration and closure prerequisites. Added CLI namespaces, versioned schemas, examples, CI and public project docs.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "go test -race ./...",
+            "result": "All implementation, negative completion-guard, persistence, CLI, path-confinement, acceptance and parity tests pass."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:48:55.776323Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Compared desired public product and authoritative Task/Goal contract against the empty repository. Planned one canonical Task manifest/CLI and one durable Goal journal/state machine, with explicit acceptance, ordered phases, atomic persistence, typed errors/evidence/debt, completion guards, AGPL parity, schemas, docs and tests. Non-goals keep providers, protocols, orchestration and OS sandboxing out of v0; risks include process isolation limits, schema alpha compatibility and cross-platform locking.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "README.md; docs/architecture.md; ROADMAP.md; schemas/*.schema.json",
+            "result": "Desired/actual gap, architecture, acceptance, risks, compatibility and non-goals are represented in code and versioned public contracts."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:48:55.75873Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Inspected standalone empty repository, origin, dirty state, sibling policies, GDS harness definition and runtime dependency context; recorded that no prior commits, branches, implementation, PRs or issue artifacts existed locally or at origin before this implementation.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "git status --short --branch; git remote -v; git ls-remote --heads origin; GDS context search",
+            "result": "Standalone agent-runtime repository, origin NDDev-it-com/agent-runtime, no commits or remote heads, no initial files; relevant GDS context defines harness as agent runtime/client."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:40:50.264077Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "Reconciled Task/Goal vocabulary, v1alpha1 versions, Go sources, schemas, CLI, examples, docs and result fields. Verified exact AGPL license parity with sibling public modules and confirmed the parent GDS has no gitlink or .gitmodules mutation; only this standalone repository is changed. GDS harness context remains compatible: this runtime loads instructions and invokes an external agent loop without claiming provider integration.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "cmp LICENSE ../ci-workflows/LICENSE; git -C ../.. diff -- .gitmodules; schema parity tests; terminology search",
+            "result": "Exact license match; no parent gitlink/.gitmodules change; Task/Goal terminology and versions synchronized; foreign ownership untouched."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:49:43.473295Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "Reviewed architecture, correctness, tests, security, public API, naming, documentation, failure behavior, operability and maintainability. Findings corrected before commit: unauthorized MIT license divergence replaced with canonical AGPL-3.0-only plus parity tests; generic manifest vocabulary replaced by Task; explicit Task acceptance added; Goal closure typed with achieved outcome, cleanup, remaining debt/risks and next work; checklist made living; journal timestamps/state invariants tightened. Residual documented risks are trusted commands, non-sandbox execution, cooperative local locking and alpha schema compatibility.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "SECURITY.md; docs/architecture.md; license_test.go; schema_parity_test.go; goal/types_test.go",
+            "result": "Review dimensions are documented and findings are implemented with regression coverage; no runtime integration evidence is claimed."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:49:43.493156Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "Ran each applicable release gate independently and observed success: race tests, coverage tests, go vet, Linux amd64 build, macOS arm64 build, govulncheck v1.6.0, Task validate/run smoke, Goal restart/status smoke, schema/license parity, diff whitespace check and parent-boundary inspection. No gate was skipped and no runtime/provider integration claim is made.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "go test -race ./...; go test -coverprofile; go vet ./...; GOOS builds; govulncheck@v1.6.0; CLI smoke",
+            "result": "All commands independently exited 0; coverage totals 68.9%; govulncheck reports no called vulnerabilities; example Task accepted=true; durable Goal restored at expected revision."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:51:46.893635Z"
+      }
+    },
+    "created_at": "2026-08-13T01:40:50.232106Z",
+    "updated_at": "2026-08-13T01:51:46.948133Z"
+  }
+}

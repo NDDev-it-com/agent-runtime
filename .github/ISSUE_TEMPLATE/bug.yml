@@ -1,0 +1,31 @@
+name: Bug report
+description: Report reproducible incorrect behavior
+body:
+  - type: markdown
+    attributes:
+      value: Security vulnerabilities must use a private security advisory.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction
+      description: Include the manifest with all secrets removed.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true

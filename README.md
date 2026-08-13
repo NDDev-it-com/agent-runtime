@@ -1,0 +1,142 @@
+# agent-runtime
+
+`agent-runtime` provides two vendor-neutral work-unit contracts for agents:
+
+- A **Task** is bounded and atomic, with explicit acceptance represented by a
+  versioned Task manifest.
+- A **Goal** is complex or long-running and carries a durable, versioned journal,
+  living acceptance checklist, ordered phases, and machine-verifiable receipts.
+
+The Go packages can be embedded; the reference CLI is useful in scripts,
+contract tests, and restart-safe agent workflows.
+
+The initial release focuses on the boundary between a control plane and an
+already-installed agent client. It does not implement a model provider, tool
+protocol, scheduler, or operating-system sandbox.
+
+## Quick start
+
+Requires Go 1.24 or newer.
+
+```sh
+go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@latest
+agent-runtime task validate --manifest examples/basic/agent.json --workspace examples/basic
+agent-runtime task run --manifest examples/basic/agent.json --workspace examples/basic
+```
+
+The command receives the assembled instruction context on standard input. Its
+combined standard output and standard error are returned as one JSON object:
+
+```json
+{"agent_id":"example","exit_code":0,"duration_ms":2,"output":"...","truncated":false,"timed_out":false,"accepted":true}
+```
+
+## Task contract
+
+```json
+{
+  "schema_version": "v1alpha1",
+  "id": "example",
+  "description": "Minimal local agent",
+  "instructions": ["AGENTS.md"],
+  "command": ["sed", "-n", "1,3p"],
+  "acceptance": {
+    "exit_codes": [0],
+    "output_contains": ["AGENTS.md"]
+  },
+  "workdir": ".",
+  "env": ["PATH"],
+  "timeout": "30s",
+  "max_output_bytes": 1048576,
+  "max_context_bytes": 1048576
+}
+```
+
+Acceptance is explicit and machine-evaluated: the observed exit code must be in
+`exit_codes`, and every optional `output_contains` value must occur in the
+bounded combined output. Task instruction order is significant. Each file is preceded by a deterministic
+`--- path ---` boundary. Unknown fields, duplicate paths or environment names,
+invalid identifiers, and unsupported versions are rejected.
+
+Defaults are a five-minute timeout and 1 MiB each for context and captured
+output. Maximums are 24 hours, 16 MiB of context, and 64 MiB of output.
+
+The canonical distributable schema is
+[`schemas/task-manifest-v1alpha1.schema.json`](schemas/task-manifest-v1alpha1.schema.json).
+
+## Goal contract
+
+Every Goal progresses through exactly these phases:
+
+1. `orient`
+2. `gap_plan`
+3. `execute`
+4. `reconcile`
+5. `self_review`
+6. `completeness_omission_audit`
+7. `verify`
+8. `closure`
+
+Each transition requires typed evidence and a phase receipt. Closure additionally
+requires an achieved outcome, cleanup record, explicit typed debt/risk list, and
+canonical next-work references. All acceptance checklist items must be complete
+with evidence. Passing one test or reaching `execute` can never complete a Goal.
+
+```sh
+agent-runtime goal init --journal goal.json --id release \
+  --intent 'Ship a release-ready runtime' \
+  --acceptance build='The binary builds' \
+  --non-goal 'Remote orchestration'
+
+agent-runtime goal advance --journal goal.json --revision 1 --phase orient \
+  --summary 'Inspected repository and prior attempts' \
+  --evidence-type command --evidence-ref 'git status --short' \
+  --evidence-result 'clean repository'
+
+agent-runtime goal status --journal goal.json
+```
+
+Mutations require the expected journal revision, use an exclusive file lock,
+write a synced temporary file, and atomically replace the journal. Loading the
+journal restores the full checklist and evidence after restart or compaction.
+The canonical distributable schema is
+[`schemas/goal-journal-v1alpha1.schema.json`](schemas/goal-journal-v1alpha1.schema.json).
+
+The journal is designed for durable evidence, so commit it when it represents
+public project work. The adjacent `*.lock` file is ephemeral and ignored.
+
+## Security model
+
+Task manifests and commands are trusted inputs. The runtime resolves the workspace,
+working directory, and instruction files through symlinks and rejects paths that
+leave the workspace. Child processes receive only environment variables named
+by the manifest. Context and captured output are bounded, and cancellation or a
+timeout terminates the direct child process.
+
+These controls are not a sandbox. A trusted command can still access files,
+processes, credentials, and networks available to its operating-system identity;
+descendant-process cleanup is platform dependent. Run untrusted agents in a
+container, VM, or OS sandbox with least-privilege credentials. See
+[`SECURITY.md`](SECURITY.md) and [`docs/architecture.md`](docs/architecture.md).
+
+## Development
+
+```sh
+go test -race ./...
+go vet ./...
+go build ./cmd/agent-runtime
+```
+
+The public API is pre-1.0 and the manifest is explicitly `v1alpha1`. Breaking
+contract changes are recorded in [`CHANGELOG.md`](CHANGELOG.md).
+
+## Project policy
+
+- Bugs and scoped feature requests belong in GitHub Issues.
+- Larger deferred work is kept in [`ROADMAP.md`](ROADMAP.md), linked to an issue
+  before implementation.
+- Security reports follow [`SECURITY.md`](SECURITY.md), not public issues.
+- Contributions follow [`CONTRIBUTING.md`](CONTRIBUTING.md).
+
+Licensed under the GNU Affero General Public License v3.0 only
+(`AGPL-3.0-only`).

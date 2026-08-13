@@ -1,0 +1,23 @@
+name: Feature request
+description: Propose a scoped runtime contract improvement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Describe the use case without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: boundary
+    attributes:
+      label: Security and compatibility boundary
+      description: Explain trust, portability, and manifest compatibility effects.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: true

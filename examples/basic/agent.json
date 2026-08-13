@@ -1,0 +1,10 @@
+{
+  "schema_version": "v1alpha1",
+  "id": "example",
+  "description": "Print the assembled context with sed",
+  "instructions": ["AGENTS.md"],
+  "command": ["sed", "-n", "1,3p"],
+  "acceptance": { "exit_codes": [0], "output_contains": ["AGENTS.md"] },
+  "env": ["PATH"],
+  "timeout": "30s"
+}

@@ -1,0 +1,5 @@
+/agent-runtime
+/coverage.out
+*.test
+.DS_Store
+*.lock

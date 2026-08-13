@@ -1,0 +1,374 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
+// Package goal implements the durable Goal journal and phase state machine.
+package goal
+
+import (
+	"errors"
+	"fmt"
+	"regexp"
+	"strings"
+	"time"
+)
+
+const SchemaVersion = "v1alpha1"
+
+type State string
+
+const (
+	StateActive    State = "active"
+	StateCompleted State = "completed"
+)
+
+type Phase string
+
+const (
+	PhaseOrient        Phase = "orient"
+	PhaseGapPlan       Phase = "gap_plan"
+	PhaseExecute       Phase = "execute"
+	PhaseReconcile     Phase = "reconcile"
+	PhaseSelfReview    Phase = "self_review"
+	PhaseOmissionAudit Phase = "completeness_omission_audit"
+	PhaseVerify        Phase = "verify"
+	PhaseClosure       Phase = "closure"
+)
+
+var Phases = []Phase{PhaseOrient, PhaseGapPlan, PhaseExecute, PhaseReconcile, PhaseSelfReview, PhaseOmissionAudit, PhaseVerify, PhaseClosure}
+
+type ErrorCode string
+
+const (
+	CodeInvalidGoal         ErrorCode = "invalid_goal"
+	CodeInvalidTransition   ErrorCode = "invalid_transition"
+	CodeIncompleteChecklist ErrorCode = "incomplete_checklist"
+	CodeMissingReceipt      ErrorCode = "missing_receipt"
+	CodeConflict            ErrorCode = "conflict"
+	CodeJournalIO           ErrorCode = "journal_io"
+)
+
+type Error struct {
+	Code    ErrorCode
+	Message string
+	Cause   error
+}
+
+func (e *Error) Error() string {
+	if e.Cause != nil {
+		return e.Message + ": " + e.Cause.Error()
+	}
+	return e.Message
+}
+func (e *Error) Unwrap() error { return e.Cause }
+func IsCode(err error, code ErrorCode) bool {
+	var target *Error
+	return errors.As(err, &target) && target.Code == code
+}
+
+type EvidenceType string
+
+const (
+	EvidenceCommand EvidenceType = "command"
+	EvidenceFile    EvidenceType = "file"
+	EvidenceLink    EvidenceType = "link"
+	EvidenceCommit  EvidenceType = "commit"
+	EvidenceTest    EvidenceType = "test"
+	EvidenceIssue   EvidenceType = "issue"
+)
+
+type Evidence struct {
+	Type      EvidenceType `json:"type"`
+	Reference string       `json:"reference"`
+	Result    string       `json:"result"`
+}
+
+type Receipt struct {
+	Phase      Phase           `json:"phase"`
+	Summary    string          `json:"summary"`
+	Evidence   []Evidence      `json:"evidence"`
+	RecordedAt time.Time       `json:"recorded_at"`
+	Closure    *ClosureDetails `json:"closure,omitempty"`
+}
+
+type RemainingKind string
+
+const (
+	RemainingDebt RemainingKind = "debt"
+	RemainingRisk RemainingKind = "risk"
+)
+
+type RemainingWork struct {
+	Kind    RemainingKind `json:"kind"`
+	Summary string        `json:"summary"`
+}
+type ClosureDetails struct {
+	AchievedOutcome string          `json:"achieved_outcome"`
+	Cleanup         string          `json:"cleanup"`
+	Remaining       []RemainingWork `json:"remaining"`
+	NextWork        []Evidence      `json:"next_work"`
+}
+
+type ItemStatus string
+
+const (
+	ItemPending  ItemStatus = "pending"
+	ItemComplete ItemStatus = "complete"
+)
+
+type ChecklistItem struct {
+	ID         string     `json:"id"`
+	Acceptance string     `json:"acceptance"`
+	Status     ItemStatus `json:"status"`
+	Evidence   []Evidence `json:"evidence,omitempty"`
+}
+
+type Goal struct {
+	ID           string            `json:"id"`
+	Intent       string            `json:"intent"`
+	Acceptance   []ChecklistItem   `json:"acceptance"`
+	NonGoals     []string          `json:"non_goals,omitempty"`
+	State        State             `json:"state"`
+	CurrentPhase Phase             `json:"current_phase"`
+	Receipts     map[Phase]Receipt `json:"receipts"`
+	CreatedAt    time.Time         `json:"created_at"`
+	UpdatedAt    time.Time         `json:"updated_at"`
+}
+
+type Journal struct {
+	SchemaVersion string `json:"schema_version"`
+	Revision      uint64 `json:"revision"`
+	Goal          Goal   `json:"goal"`
+}
+
+var idPattern = regexp.MustCompile(`^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$`)
+
+func New(id, intent string, acceptance []ChecklistItem, nonGoals []string, now time.Time) (Journal, error) {
+	for i := range acceptance {
+		acceptance[i].Status = ItemPending
+		acceptance[i].Evidence = nil
+	}
+	j := Journal{SchemaVersion: SchemaVersion, Revision: 1, Goal: Goal{ID: id, Intent: strings.TrimSpace(intent), Acceptance: acceptance, NonGoals: nonGoals, State: StateActive, CurrentPhase: PhaseOrient, Receipts: map[Phase]Receipt{}, CreatedAt: now.UTC(), UpdatedAt: now.UTC()}}
+	if err := j.Validate(); err != nil {
+		return Journal{}, err
+	}
+	return j, nil
+}
+
+func (j Journal) Validate() error {
+	if j.SchemaVersion != SchemaVersion {
+		return invalid("schema_version must be " + SchemaVersion)
+	}
+	if j.Revision == 0 {
+		return invalid("revision must be positive")
+	}
+	if !idPattern.MatchString(j.Goal.ID) {
+		return invalid("goal id has invalid format")
+	}
+	if strings.TrimSpace(j.Goal.Intent) == "" {
+		return invalid("goal intent is required")
+	}
+	if len(j.Goal.Acceptance) == 0 {
+		return invalid("goal acceptance checklist is required")
+	}
+	seen := map[string]bool{}
+	for _, item := range j.Goal.Acceptance {
+		if !idPattern.MatchString(item.ID) || strings.TrimSpace(item.Acceptance) == "" {
+			return invalid("checklist item id and acceptance are required")
+		}
+		if seen[item.ID] {
+			return invalid("duplicate checklist item: " + item.ID)
+		}
+		seen[item.ID] = true
+		if item.Status != ItemPending && item.Status != ItemComplete {
+			return invalid("invalid checklist status for " + item.ID)
+		}
+		if item.Status == ItemComplete && validateEvidence(item.Evidence) != nil {
+			return invalid("completed checklist item lacks valid evidence: " + item.ID)
+		}
+	}
+	if phaseIndex(j.Goal.CurrentPhase) < 0 {
+		return invalid("invalid current_phase")
+	}
+	if j.Goal.State != StateActive && j.Goal.State != StateCompleted {
+		return invalid("invalid goal state")
+	}
+	if j.Goal.Receipts == nil {
+		return invalid("receipts must be an object")
+	}
+	if j.Goal.CreatedAt.IsZero() || j.Goal.UpdatedAt.Before(j.Goal.CreatedAt) {
+		return invalid("goal timestamps are invalid")
+	}
+	for _, value := range j.Goal.NonGoals {
+		if strings.TrimSpace(value) == "" {
+			return invalid("non-goals must not be empty")
+		}
+	}
+	for phase, receipt := range j.Goal.Receipts {
+		if phaseIndex(phase) < 0 || receipt.Phase != phase || strings.TrimSpace(receipt.Summary) == "" || validateEvidence(receipt.Evidence) != nil || receipt.RecordedAt.IsZero() || validateClosure(receipt) != nil {
+			return invalid("invalid receipt for phase " + string(phase))
+		}
+	}
+	current := phaseIndex(j.Goal.CurrentPhase)
+	if j.Goal.State == StateActive {
+		for i, phase := range Phases {
+			_, exists := j.Goal.Receipts[phase]
+			if exists != (i < current) {
+				return invalid("receipts do not match current phase")
+			}
+		}
+	}
+	if j.Goal.State == StateCompleted {
+		if j.Goal.CurrentPhase != PhaseClosure {
+			return invalid("completed goal must be at closure")
+		}
+		if err := j.completionPrerequisites(); err != nil {
+			return invalid("completed goal violates prerequisites: " + err.Error())
+		}
+	}
+	return nil
+}
+
+func (j *Journal) CompleteItem(id string, evidence []Evidence, now time.Time) error {
+	if err := j.Validate(); err != nil {
+		return err
+	}
+	if j.Goal.State != StateActive {
+		return transition("completed goals are immutable")
+	}
+	if err := validateEvidence(evidence); err != nil {
+		return err
+	}
+	for i := range j.Goal.Acceptance {
+		if j.Goal.Acceptance[i].ID == id {
+			j.Goal.Acceptance[i].Status = ItemComplete
+			j.Goal.Acceptance[i].Evidence = append([]Evidence(nil), evidence...)
+			j.touch(now)
+			return nil
+		}
+	}
+	return invalid("unknown checklist item: " + id)
+}
+
+func (j *Journal) AddChecklistItem(item ChecklistItem, now time.Time) error {
+	if err := j.Validate(); err != nil {
+		return err
+	}
+	if j.Goal.State != StateActive {
+		return transition("completed goals are immutable")
+	}
+	if !idPattern.MatchString(item.ID) || strings.TrimSpace(item.Acceptance) == "" {
+		return invalid("checklist item id and acceptance are required")
+	}
+	for _, existing := range j.Goal.Acceptance {
+		if existing.ID == item.ID {
+			return invalid("duplicate checklist item: " + item.ID)
+		}
+	}
+	item.Status = ItemPending
+	item.Evidence = nil
+	j.Goal.Acceptance = append(j.Goal.Acceptance, item)
+	j.touch(now)
+	return nil
+}
+
+func (j *Journal) Advance(receipt Receipt, now time.Time) error {
+	if err := j.Validate(); err != nil {
+		return err
+	}
+	if j.Goal.State != StateActive {
+		return transition("completed goals are immutable")
+	}
+	if receipt.Phase != j.Goal.CurrentPhase {
+		return transition(fmt.Sprintf("expected phase %s, got %s", j.Goal.CurrentPhase, receipt.Phase))
+	}
+	if strings.TrimSpace(receipt.Summary) == "" {
+		return &Error{Code: CodeMissingReceipt, Message: "receipt summary is required"}
+	}
+	if err := validateEvidence(receipt.Evidence); err != nil {
+		return err
+	}
+	if err := validateClosure(receipt); err != nil {
+		return err
+	}
+	if _, exists := j.Goal.Receipts[receipt.Phase]; exists {
+		return transition("phase already has a receipt")
+	}
+	receipt.RecordedAt = now.UTC()
+	j.Goal.Receipts[receipt.Phase] = receipt
+	index := phaseIndex(receipt.Phase)
+	if receipt.Phase == PhaseClosure {
+		if err := j.completionPrerequisites(); err != nil {
+			delete(j.Goal.Receipts, receipt.Phase)
+			return err
+		}
+		j.Goal.State = StateCompleted
+	} else {
+		j.Goal.CurrentPhase = Phases[index+1]
+	}
+	j.touch(now)
+	return nil
+}
+
+func (j Journal) completionPrerequisites() error {
+	for _, item := range j.Goal.Acceptance {
+		if item.Status != ItemComplete {
+			return &Error{Code: CodeIncompleteChecklist, Message: "checklist item is not complete: " + item.ID}
+		}
+	}
+	for _, phase := range Phases {
+		if _, ok := j.Goal.Receipts[phase]; !ok {
+			return &Error{Code: CodeMissingReceipt, Message: "missing phase receipt: " + string(phase)}
+		}
+	}
+	return nil
+}
+
+func (j *Journal) touch(now time.Time) { j.Revision++; j.Goal.UpdatedAt = now.UTC() }
+func phaseIndex(phase Phase) int {
+	for i, candidate := range Phases {
+		if candidate == phase {
+			return i
+		}
+	}
+	return -1
+}
+func validateEvidence(items []Evidence) error {
+	if len(items) == 0 {
+		return &Error{Code: CodeMissingReceipt, Message: "at least one evidence record is required"}
+	}
+	for _, item := range items {
+		validType := item.Type == EvidenceCommand || item.Type == EvidenceFile || item.Type == EvidenceLink || item.Type == EvidenceCommit || item.Type == EvidenceTest || item.Type == EvidenceIssue
+		if !validType || strings.TrimSpace(item.Reference) == "" || strings.TrimSpace(item.Result) == "" {
+			return &Error{Code: CodeMissingReceipt, Message: "evidence type, reference, and result are required"}
+		}
+	}
+	return nil
+}
+func validateClosure(receipt Receipt) error {
+	if receipt.Phase != PhaseClosure {
+		if receipt.Closure != nil {
+			return &Error{Code: CodeInvalidGoal, Message: "closure details are only valid for closure phase"}
+		}
+		return nil
+	}
+	if receipt.Closure == nil {
+		return &Error{Code: CodeMissingReceipt, Message: "closure details are required"}
+	}
+	c := receipt.Closure
+	if strings.TrimSpace(c.AchievedOutcome) == "" || strings.TrimSpace(c.Cleanup) == "" || c.Remaining == nil || c.NextWork == nil {
+		return &Error{Code: CodeMissingReceipt, Message: "closure requires achieved_outcome, cleanup, explicit remaining list, and explicit next_work list"}
+	}
+	for _, item := range c.Remaining {
+		if (item.Kind != RemainingDebt && item.Kind != RemainingRisk) || strings.TrimSpace(item.Summary) == "" {
+			return &Error{Code: CodeInvalidGoal, Message: "remaining work requires debt/risk kind and summary"}
+		}
+	}
+	if len(c.NextWork) == 0 {
+		return &Error{Code: CodeMissingReceipt, Message: "closure requires canonical next_work evidence"}
+	}
+	if err := validateEvidence(c.NextWork); err != nil {
+		return err
+	}
+	return nil
+}
+func invalid(message string) error    { return &Error{Code: CodeInvalidGoal, Message: message} }
+func transition(message string) error { return &Error{Code: CodeInvalidTransition, Message: message} }
