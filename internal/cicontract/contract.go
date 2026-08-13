@@ -20,6 +20,8 @@ type Contract struct {
 	License         string `json:"license"`
 	Govulncheck     Tool   `json:"govulncheck"`
 	SecurityGo      string `json:"security_go"`
+	SecurityArchive string `json:"security_go_archive"`
+	SecuritySHA256  string `json:"security_go_sha256"`
 	CompatibilityGo string `json:"compatibility_go"`
 }
 type Tool struct {
@@ -40,8 +42,11 @@ func Load(path string) (Contract, error) {
 	if err := decoder.Decode(&c); err != nil {
 		return Contract{}, fmt.Errorf("decode contract: %w", err)
 	}
-	if c.SchemaVersion != "v1alpha1" || c.License != releasecontract.CanonicalLicense || c.Govulncheck.Module == "" || c.Govulncheck.Version == "" || c.Govulncheck.MinimumGo == "" || c.Govulncheck.UpstreamGoMod == "" || c.SecurityGo == "" || c.CompatibilityGo == "" {
+	if c.SchemaVersion != "v1alpha1" || c.License != releasecontract.CanonicalLicense || c.Govulncheck.Module == "" || c.Govulncheck.Version == "" || c.Govulncheck.MinimumGo == "" || c.Govulncheck.UpstreamGoMod == "" || c.SecurityGo == "" || c.SecurityArchive == "" || c.SecuritySHA256 == "" || c.CompatibilityGo == "" {
 		return Contract{}, errors.New("contract has missing or unsupported fields")
+	}
+	if c.SecurityArchive != "go"+c.SecurityGo+".darwin-arm64.tar.gz" || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(c.SecuritySHA256) {
+		return Contract{}, errors.New("security Go archive identity is not canonical")
 	}
 	return c, nil
 }
@@ -74,6 +79,15 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	}
 	if strings.Count(text, "go run ./cmd/check-fuzz") != 1 {
 		return errors.New("workflow must invoke the canonical fuzz verifier exactly once")
+	}
+	securityBody, err := jobBody(text, "govulncheck")
+	if err != nil {
+		return err
+	}
+	for _, command := range []string{"go test ./...", "go vet ./...", "go build ./cmd/agent-runtime", "go run ./cmd/check-module-tidy", "go run ./cmd/check-ci-contract", "go run ./cmd/check-release-contract"} {
+		if strings.Count(securityBody, command) != 1 {
+			return fmt.Errorf("security lane must run %q exactly once", command)
+		}
 	}
 	if err := verifyReleaseReproductionCommand(text); err != nil {
 		return err
@@ -109,6 +123,18 @@ func verifyReleaseReproductionCommand(workflow string) error {
 	return nil
 }
 func jobGoVersion(workflow, job string) (string, error) {
+	body, err := jobBody(workflow, job)
+	if err != nil {
+		return "", err
+	}
+	version := regexp.MustCompile(`go-version:\s*'([^']+)'`).FindStringSubmatch(body)
+	if version == nil {
+		return "", fmt.Errorf("workflow job %s has no literal go-version", job)
+	}
+	return strings.TrimSuffix(version[1], ".x"), nil
+}
+
+func jobBody(workflow, job string) (string, error) {
 	marker := "  " + job + ":\n"
 	start := strings.Index(workflow, marker)
 	if start < 0 {
@@ -119,11 +145,7 @@ func jobGoVersion(workflow, job string) (string, error) {
 	if next := jobBoundary.FindStringIndex(body); next != nil {
 		body = body[:next[0]]
 	}
-	version := regexp.MustCompile(`go-version:\s*'([^']+)'`).FindStringSubmatch(body)
-	if version == nil {
-		return "", fmt.Errorf("workflow job %s has no literal go-version", job)
-	}
-	return strings.TrimSuffix(version[1], ".x"), nil
+	return body, nil
 }
 func normalizeMinor(v string) string {
 	parts := strings.Split(v, ".")

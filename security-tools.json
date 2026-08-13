@@ -8,5 +8,7 @@
     "upstream_go_mod": "https://github.com/golang/vuln/blob/v1.6.0/go.mod"
   },
   "security_go": "1.26.5",
-  "compatibility_go": "1.24"
+  "security_go_archive": "go1.26.5.darwin-arm64.tar.gz",
+  "security_go_sha256": "efb87ff28af9a188d0536ef5d42e63dd52ba8263cd7344a993cc48dd11dedb6a",
+  "compatibility_go": "1.25"
 }

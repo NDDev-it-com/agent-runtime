@@ -13,7 +13,7 @@
     "source_commit": {"pattern": "^[0-9a-f]{40}$"},
     "source_commit_time": {"type": "string", "format": "date-time"},
     "module_path": {"type": "string"},
-    "go_compatibility": {"type": "string"},
+    "go_compatibility": {"const": "1.25"},
     "license": {"const": "AGPL-3.0-only"},
     "dependencies": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"enum": ["github.com/ProtonMail/go-crypto", "github.com/cloudflare/circl", "golang.org/x/crypto", "golang.org/x/mod", "golang.org/x/sys"]}, "version": {"pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"}, "license": {"const": "BSD-3-Clause"}, "indirect": {"type": "boolean"}}}},
     "workflow": {"type": "string"},

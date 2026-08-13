@@ -1,7 +1,7 @@
 # Releasing the Go module/source product
 
 `release/v1alpha1.json` is the only release source of truth. The first version
-is `v0.1.0`; the compatibility declaration remains Go 1.24. The repository
+is `v0.1.0`; the compatibility declaration is Go 1.25. The repository
 ships the Go module and tracked source, not prebuilt binaries or a platform
 matrix.
 
@@ -85,7 +85,10 @@ covers every other asset and deliberately does not checksum itself.
    semantics.
 6. Run full tests, race, fuzz seeds, vet, formatting, CI/security/governance
    contracts and pinned `govulncheck` under the exact patched Go 1.26.5
-   security lane. The module declaration and test/release lanes remain Go 1.24.
+   security lane. The module declaration and minimum test/release lanes use Go
+   1.25; the current lane also reruns module, build, test, and release contracts.
+   `security-tools.json` pins the official Go 1.26.5 Darwin ARM64 archive name
+   and SHA-256 so local current-lane provisioning has one reviewed identity.
    Run `go run ./cmd/check-fuzz` for the active fuzzing gate. It inventories
    every repository fuzz target and runs each exact package/target separately
    with the versioned bounds in `fuzz/v1alpha1.json`; direct multi-package
@@ -95,6 +98,12 @@ covers every other asset and deliberately does not checksum itself.
    pins CIRCL v1.6.3, whose
    [official release](https://github.com/cloudflare/circl/releases/tag/v1.6.3)
    fixes the P-384 defect tracked as GO-2026-4550.
+   The dependency closure also pins `golang.org/x/crypto` v0.52.0 and
+   `golang.org/x/sys` v0.45.0. The former requires Go 1.25.0 and fixes the SSH
+   boundary tracked as GO-2026-5020. Runtime integration provenance continues
+   to use the ProtonMail OpenPGP fork, while owner SSH verification remains the
+   repository's hermetic Git/ssh-keygen contract; the dependency upgrade does
+   not merge those trust roles.
 7. Merge a signed PR only after exact-head CI and CodeQL are green. Recheck the
    post-merge `main` runs and reread this contract.
 8. Confirm repository immutable releases are enabled, no tag/release exists,
