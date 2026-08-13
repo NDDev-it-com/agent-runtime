@@ -102,8 +102,15 @@ type commitResponse struct {
 	Commit    commitBlock `json:"commit"`
 }
 type commitBlock struct {
+	Author       apiGitIdentity  `json:"author"`
+	Committer    apiGitIdentity  `json:"committer"`
 	Tree         apiRef          `json:"tree"`
 	Verification apiVerification `json:"verification"`
+}
+type apiGitIdentity struct {
+	Name  string    `json:"name"`
+	Email string    `json:"email"`
+	Date  time.Time `json:"date"`
 }
 type apiVerification struct {
 	Verified   bool      `json:"verified"`
@@ -229,13 +236,10 @@ func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, erro
 	if err != nil {
 		return Result{}, err
 	}
-	if !bytes.Equal(localPayload, []byte(integration.Commit.Verification.Payload)) || !bytes.Equal(localSignature, []byte(integration.Commit.Verification.Signature)) {
-		return Result{}, errors.New("GitHub verification payload/signature differs from local commit object")
+	if err := verifyIntegrationSignatureEvidence(root, request.Contract, integration.Commit.Verification, localPayload, localSignature, pull.MergedAt); err != nil {
+		return Result{}, err
 	}
-	if !integration.Commit.Verification.Verified || integration.Commit.Verification.Reason != "valid" || integration.Commit.Verification.VerifiedAt.IsZero() {
-		return Result{}, errors.New("integration signature API evidence is absent, partial, or invalid")
-	}
-	if err := verifyOpenPGP(root, request.Contract, localPayload, localSignature, pull.MergedAt); err != nil {
+	if err := validateLocalCommitIdentity(localPayload, integration); err != nil {
 		return Result{}, err
 	}
 	var sourceItems []apiCommitListItem
@@ -263,6 +267,106 @@ func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, erro
 		return Result{}, err
 	}
 	return Result{IntegrationSHA: integration.SHA, BaseSHA: pull.Base.SHA, HeadSHA: pull.Head.SHA, TreeSHA: integration.Commit.Tree.SHA, PullRequest: pull.Number, SourceCommits: sources, CheckRuns: checks, CheckSuites: suites}, nil
+}
+
+func verifyIntegrationSignatureEvidence(root string, contract Contract, verification apiVerification, localPayload, localSignature []byte, mergedAt time.Time) error {
+	if !verification.Verified || verification.Reason != "valid" || verification.VerifiedAt.IsZero() || verification.VerifiedAt.Before(mergedAt) {
+		return errors.New("integration signature API evidence is absent, partial, stale, or invalid")
+	}
+	providerPayload := []byte(verification.Payload)
+	providerSignature := []byte(verification.Signature)
+	if len(providerPayload) == 0 || len(providerPayload) > maxAPIBytes || len(providerSignature) == 0 || len(providerSignature) > 64<<10 {
+		return errors.New("integration signature API payload is missing or unbounded")
+	}
+	if !bytes.Equal(localPayload, providerPayload) {
+		return errors.New("GitHub signed payload differs from the normative local commit payload")
+	}
+	if err := verifyOpenPGP(root, contract, providerPayload, providerSignature, mergedAt); err != nil {
+		return fmt.Errorf("verify provider integration signature evidence: %w", err)
+	}
+	if err := verifyOpenPGP(root, contract, localPayload, localSignature, mergedAt); err != nil {
+		return fmt.Errorf("verify local integration signature embedding: %w", err)
+	}
+	return nil
+}
+
+func validateLocalCommitIdentity(payload []byte, commit commitResponse) error {
+	headers, _, ok := bytes.Cut(payload, []byte("\n\n"))
+	if !ok {
+		return errors.New("local commit payload has no header/message boundary")
+	}
+	var tree string
+	var parents []string
+	var author, committer apiGitIdentity
+	for _, line := range strings.Split(string(headers), "\n") {
+		switch {
+		case strings.HasPrefix(line, "tree "):
+			tree = strings.TrimPrefix(line, "tree ")
+		case strings.HasPrefix(line, "parent "):
+			parents = append(parents, strings.TrimPrefix(line, "parent "))
+		case strings.HasPrefix(line, "author "):
+			var err error
+			author, err = parseGitIdentity(strings.TrimPrefix(line, "author "))
+			if err != nil {
+				return err
+			}
+		case strings.HasPrefix(line, "committer "):
+			var err error
+			committer, err = parseGitIdentity(strings.TrimPrefix(line, "committer "))
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if tree != commit.Commit.Tree.SHA || len(parents) != len(commit.Parents) {
+		return errors.New("local commit tree or parent closure differs from REST")
+	}
+	for index := range parents {
+		if parents[index] != commit.Parents[index].SHA {
+			return errors.New("local commit parent order differs from REST")
+		}
+	}
+	if !equalGitIdentity(author, commit.Commit.Author) || !equalGitIdentity(committer, commit.Commit.Committer) {
+		return errors.New("local commit author or committer identity differs from REST")
+	}
+	return nil
+}
+
+func equalGitIdentity(a, b apiGitIdentity) bool {
+	return a.Name == b.Name && a.Email == b.Email && !a.Date.IsZero() && a.Date.Equal(b.Date)
+}
+
+func parseGitIdentity(value string) (apiGitIdentity, error) {
+	endEmail := strings.LastIndex(value, "> ")
+	startEmail := strings.LastIndex(value[:maxInt(endEmail, 0)], " <")
+	if endEmail < 0 || startEmail < 1 {
+		return apiGitIdentity{}, errors.New("local commit identity is malformed")
+	}
+	fields := strings.Fields(value[endEmail+2:])
+	if len(fields) != 2 || len(fields[1]) != 5 || (fields[1][0] != '+' && fields[1][0] != '-') {
+		return apiGitIdentity{}, errors.New("local commit identity timestamp is malformed")
+	}
+	epoch, err := strconv.ParseInt(fields[0], 10, 64)
+	if err != nil {
+		return apiGitIdentity{}, errors.New("local commit identity epoch is malformed")
+	}
+	hours, errH := strconv.Atoi(fields[1][1:3])
+	minutes, errM := strconv.Atoi(fields[1][3:5])
+	if errH != nil || errM != nil || hours > 23 || minutes > 59 {
+		return apiGitIdentity{}, errors.New("local commit identity timezone is malformed")
+	}
+	offset := (hours*60 + minutes) * 60
+	if fields[1][0] == '-' {
+		offset = -offset
+	}
+	return apiGitIdentity{Name: value[:startEmail], Email: value[startEmail+2 : endEmail], Date: time.Unix(epoch, 0).In(time.FixedZone("git", offset))}, nil
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
 }
 
 func validateIntegrationIdentity(contract Contract, pull pullResponse, graph graphPullResponse, commit commitResponse) error {
@@ -485,7 +589,12 @@ func splitCommitSignature(raw []byte) ([]byte, []byte, error) {
 			continue
 		}
 		if inSignature && len(line) > 0 && line[0] == ' ' {
-			signature.Write(line[1:])
+			content := line[1:]
+			if len(content) == 0 && bytes.HasSuffix(signature.Bytes(), []byte("-----END PGP SIGNATURE-----\n")) {
+				inSignature = false
+				continue
+			}
+			signature.Write(content)
 			if bytes.HasSuffix(framed, []byte("\n")) {
 				signature.WriteByte('\n')
 			}
