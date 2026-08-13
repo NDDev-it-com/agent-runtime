@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 12,
+  "revision": 14,
   "goal": {
     "id": "initial-release",
     "intent": "Deliver a public, initial release-ready agent-runtime with bounded Task execution and durable contract-enforced Goals",
@@ -56,7 +56,14 @@
       {
         "id": "publication",
         "acceptance": "Repository has a clean coherent initial commit on its own main branch and is ready for public release",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "commit",
+            "reference": "commit:feat: establish Task and Goal runtime contracts",
+            "result": "Standalone agent-runtime main has a coherent root commit containing the release candidate; parent GDS and siblings were not staged or committed."
+          }
+        ]
       }
     ],
     "non_goals": [
@@ -64,9 +71,46 @@
       "Claim OS sandboxing or hostile-command isolation",
       "Modify the parent GDS repository or sibling modules"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Initial public release candidate achieved: bounded Task execution and durable contract-enforced Goals are implemented, documented, independently verified and committed. Temporary build/test artifacts remain outside the repository; ephemeral journal locks are ignored. Remaining typed risks are explicit and next canonical work is ROADMAP.md/GitHub Issues.",
+        "evidence": [
+          {
+            "type": "commit",
+            "reference": "commit:feat: establish Task and Goal runtime contracts",
+            "result": "Initial standalone repository commit contains all implementation, tests, schemas and public documentation."
+          }
+        ],
+        "recorded_at": "2026-08-13T01:52:09.471526Z",
+        "closure": {
+          "achieved_outcome": "Release-ready v0.1.0 source for bounded Tasks and durable eight-phase Goals, with explicit acceptance and guarded closure.",
+          "cleanup": "Temporary binaries, coverage output and captured command output were kept under /tmp; journal lock is ignored; no parent or sibling mutation was made.",
+          "remaining": [
+            {
+              "kind": "risk",
+              "summary": "Task commands are trusted and are not OS-sandboxed; callers must provide external isolation."
+            },
+            {
+              "kind": "risk",
+              "summary": "v1alpha1 Task and Goal schemas may change before stable v1."
+            },
+            {
+              "kind": "debt",
+              "summary": "Windows journal locking and durability semantics are not implemented or claimed."
+            }
+          ],
+          "next_work": [
+            {
+              "type": "file",
+              "reference": "ROADMAP.md",
+              "result": "Canonical typed follow-up queue; each item requires an accepted GitHub issue before implementation."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Asked what may have been forgotten and audited edge cases, TODOs, stale terminology, duplicated concepts, compatibility paths, dirty/branch/lock state, schemas, licenses, docs, configs and partial evidence. Findings fixed: coverage instrumentation made an exact helper-output assertion brittle; a compound verification command could return a later successful exit and mask that failure, so the assertion now checks the contractual substring and every verification gate is run independently. Ephemeral lock files are ignored. No TODO/FIXME, obsolete CLI alias, stale license text, generated projection drift or hidden compatibility path remains. The repository remains intentionally uncommitted at this phase; commit/publication acceptance stays pending.",
@@ -153,6 +197,6 @@
       }
     },
     "created_at": "2026-08-13T01:40:50.232106Z",
-    "updated_at": "2026-08-13T01:51:46.948133Z"
+    "updated_at": "2026-08-13T01:52:09.471526Z"
   }
 }
