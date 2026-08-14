@@ -6,6 +6,16 @@ contract.
 
 ## [Unreleased]
 
+### Changed
+
+- The security model documents two boundaries it previously left to inference.
+  A bare command name is resolved through the caller's `PATH` before the child
+  environment is applied, so the manifest does not decide which binary runs
+  (tracked in #46). Redaction is driven by the attribute-name vocabulary rather
+  than by inspecting a value for the shape of a secret, so naming an attribute
+  honestly is the caller's job — a private key under a neutral name is published
+  verbatim. A test now pins the second boundary in both directions.
+
 ## [0.1.2] - 2026-08-14
 
 ### Added

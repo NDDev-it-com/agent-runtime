@@ -17,8 +17,12 @@ five business days. Disclosure timing is coordinated after a fix is available.
 Task manifests and their command arrays must come from trusted, reviewed
 sources. Workspace path confinement protects instruction selection; it does not
 confine the process that is launched. Environment allowlisting reduces accidental
-credential inheritance but is not sufficient isolation. Use an external sandbox
-for untrusted code and provide only short-lived, least-privilege credentials.
+credential inheritance but is not sufficient isolation. It also does not govern
+which executable is selected: a bare command name is resolved against the
+caller's `PATH` before the child environment is applied, so the host, not the
+manifest, decides which binary runs. Pass an absolute path where that matters.
+Use an external sandbox for untrusted code and provide only short-lived,
+least-privilege credentials.
 
 Avoid placing secrets in manifests, instructions, command arguments, logs, or
 issue reports. Captured command output may contain sensitive data and should be

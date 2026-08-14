@@ -190,14 +190,21 @@ leave the workspace. Child processes receive only environment variables named
 by the manifest. Context and captured output are bounded, and cancellation or a
 timeout terminates the direct child process.
 
+A bare command name is still resolved through the *caller's* `PATH`, not the
+manifest's, so the manifest does not decide which binary runs and the resolved
+path is not recorded. Give an absolute path when that matters
+([issue #46](https://github.com/NDDev-it-com/agent-runtime/issues/46)).
+
 These controls are not a sandbox. A trusted command can still access files,
 processes, credentials, and networks available to its operating-system identity;
 descendant-process cleanup is platform dependent. Run untrusted agents in a
 container, VM, or OS sandbox with least-privilege credentials. See
 [`SECURITY.md`](SECURITY.md) and [`docs/architecture.md`](docs/architecture.md).
 
-Observability defaults to fail-closed redaction. Attribute sensitivity must be
-declared; confidential/secret, raw command/environment/provider content,
+Observability defaults to fail-closed redaction, driven by a vocabulary of
+attribute names and values rather than by scanning a value for the shape of a
+secret: naming an attribute honestly is the caller's job. Attribute sensitivity
+must be declared; confidential/secret, raw command/environment/provider content,
 credentials, unsafe URLs, binary values, errors/stringers, unknown structures,
 and oversize content are never sent to sinks. Redaction decisions report only
 reason/count pairs.
