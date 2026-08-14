@@ -117,6 +117,7 @@ func GoalTransitionDrafts(before, after goalpkg.Journal, c Context) ([]Draft, er
 			for kind := range kinds {
 				payload.DebtKinds = append(payload.DebtKinds, kind)
 			}
+			sort.Strings(payload.DebtKinds)
 		}
 		events = append(events, c.draft(GoalCompleted, subject, OutcomeSucceeded, payload))
 	}

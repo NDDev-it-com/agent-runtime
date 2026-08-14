@@ -37,7 +37,7 @@ The command receives the assembled instruction context on standard input. Its
 combined standard output and standard error are returned as one JSON object:
 
 ```json
-{"agent_id":"example","exit_code":0,"duration_ms":2,"output":"...","truncated":false,"timed_out":false,"accepted":true}
+{"agent_id":"example","exit_code":0,"duration_ms":2,"output":"...","truncated":false,"timed_out":false,"cancelled":false,"accepted":true}
 ```
 
 ## Task contract
@@ -69,6 +69,14 @@ invalid identifiers, and unsupported versions are rejected.
 
 Defaults are a five-minute timeout and 1 MiB each for context and captured
 output. Maximums are 24 hours, 16 MiB of context, and 64 MiB of output.
+`max_context_bytes` bounds the read itself, not only the assembled result, so an
+instruction file larger than the budget is rejected from its metadata without
+being loaded.
+
+A run that ends early reports why. `timed_out` means the manifest timeout
+elapsed; `cancelled` means the caller ended the run, either by cancelling its
+context or by reaching its own deadline. The two are never conflated, and the
+returned error wraps the caller's cause so `errors.Is` still works.
 
 The canonical distributable schema is
 [`schemas/task-manifest-v1alpha1.schema.json`](schemas/task-manifest-v1alpha1.schema.json).
@@ -131,11 +139,17 @@ agent-runtime goal status --journal goal.json
 Mutations require the expected journal revision, use an exclusive file lock,
 write a synced temporary file, and atomically replace the journal. Loading the
 journal restores the full checklist and evidence after restart or compaction.
+Goal identity, sealed receipts and recorded acceptance history are immutable:
+the store validates the transition itself, so no mutation can rewrite what a
+prior phase reported.
 The canonical distributable schema is
 [`schemas/goal-journal-v1alpha1.schema.json`](schemas/goal-journal-v1alpha1.schema.json).
 
 Evidence discovered later can be appended to an existing receipt with
-`goal evidence`; receipt summaries and existing evidence remain immutable.
+`goal evidence`; receipt summaries and existing evidence remain immutable. The
+`--*-type`, `--*-ref` and `--*-result` flags are repeatable and positional with
+respect to each other, so one command can record several evidence records; an
+unequal count is rejected rather than silently truncated.
 
 The journal is designed for durable evidence, so commit it when it represents
 public project work. The adjacent `*.lock` file is ephemeral and ignored.

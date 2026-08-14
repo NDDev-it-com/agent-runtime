@@ -88,15 +88,21 @@ covers every other asset and deliberately does not checksum itself.
    owns staging and publishes each complete bundle with atomic no-replace
    semantics.
 6. Run full tests, race, fuzz seeds, vet, formatting, CI/security/governance
-   contracts and pinned `govulncheck` under the exact patched Go 1.26.5
+   contracts and pinned `govulncheck` under the exact patched Go 1.26.6
    security lane. The module declaration and test/release lanes remain Go 1.24.
    Run `go run ./cmd/check-fuzz` for the active fuzzing gate. It inventories
    every repository fuzz target and runs each exact package/target separately
    with the versioned bounds in `fuzz/v1alpha1.json`; direct multi-package
    `go test -fuzz` commands are not valid or accepted.
-   Go 1.26.5 is the first 1.26 patch fixing
-   [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856); the dependency closure
-   pins CIRCL v1.6.3, whose
+   The security lane tracks the current patch rather than a fixed one, because
+   `govulncheck` resolves the live vulnerability database: a commit that scanned
+   clean can start failing without any change to the repository. Go 1.26.6 fixes
+   [GO-2026-6218](https://pkg.go.dev/vuln/GO-2026-6218) in `net/url`,
+   [GO-2026-6090](https://pkg.go.dev/vuln/GO-2026-6090) in `crypto/tls` and
+   [GO-2026-5972](https://pkg.go.dev/vuln/GO-2026-5972) in `encoding/asn1`, all
+   of which the runtime reaches; Go 1.26.5 fixed
+   [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) before them. The
+   dependency closure pins CIRCL v1.6.3, whose
    [official release](https://github.com/cloudflare/circl/releases/tag/v1.6.3)
    fixes the P-384 defect tracked as GO-2026-4550.
 7. Merge a signed PR only after exact-head CI and CodeQL are green. Recheck the
