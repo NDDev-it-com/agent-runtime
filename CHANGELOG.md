@@ -27,6 +27,16 @@ contract.
   slices, so a "before" snapshot taken by assignment silently reflected later
   mutations.
 
+### Security
+
+- Moved the pinned vulnerability-scanning lane from Go 1.26.5 to Go 1.26.6.
+  `govulncheck` began reporting three reachable standard-library defects against
+  1.26.5 — [GO-2026-6218](https://pkg.go.dev/vuln/GO-2026-6218) in `net/url`,
+  [GO-2026-6090](https://pkg.go.dev/vuln/GO-2026-6090) in `crypto/tls` and
+  [GO-2026-5972](https://pkg.go.dev/vuln/GO-2026-5972) in `encoding/asn1` — none
+  of which existed in the database when the lane was pinned. All three are fixed
+  in 1.26.6, and the scan is clean on it.
+
 ## [0.1.0] - 2026-08-13
 
 ### Added
