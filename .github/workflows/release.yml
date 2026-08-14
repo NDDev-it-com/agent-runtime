@@ -78,7 +78,8 @@ jobs:
           release_dist="${release_parent}/release-dist"
           release_result="${release_parent}/build-result.json"
           go run ./cmd/check-release-contract --contract "$RELEASE_CONTRACT" --expect-version "$GITHUB_REF_NAME" --build --commit HEAD --out "$release_dist" --result "$release_result"
-          go run ./cmd/check-release-contract --contract "$RELEASE_CONTRACT" --out "$release_dist" --verify-result "$release_result"
+          release_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"
+          go run ./cmd/check-release-contract --contract "$RELEASE_CONTRACT" --out "$release_dist" --verify-result "$release_result" --expect-commit "$release_commit"
           echo "RELEASE_DIST=$release_dist" >>"$GITHUB_ENV"
           {
             echo '### Release bundle'

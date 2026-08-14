@@ -90,3 +90,61 @@ func FuzzDecodeTaskManifest(f *testing.F) {
 	f.Add([]byte(`{"schema_version":"v1alpha1","id":"agent","instructions":["AGENTS.md"],"command":["agent"],"acceptance":{"exit_codes":[0]}}`))
 	f.Fuzz(func(t *testing.T, data []byte) { _, _ = DecodeTaskManifest(strings.NewReader(string(data))) })
 }
+
+// TestStatedBoundsAreNotWidened covers the fail-open path where a document that
+// asked for no execution time, no output or no context was granted the default
+// instead. Absence and an explicit zero decode identically in Go, so the
+// distinction has to be drawn from the document. A negative value was already
+// refused, which made zero the only way through.
+func TestStatedBoundsAreNotWidened(t *testing.T) {
+	t.Parallel()
+	const base = `{"schema_version":"v1alpha1","id":"probe","instructions":["AGENTS.md"],` +
+		`"command":["/bin/true"],"acceptance":{"exit_codes":[0]}`
+
+	stated, err := DecodeTaskManifest(strings.NewReader(base + `}`))
+	if err != nil {
+		t.Fatalf("a manifest that states no bounds must still decode: %v", err)
+	}
+	if stated.Timeout.Duration != DefaultTimeout || stated.MaxOutput != DefaultMaxOutputBytes || stated.MaxContext != DefaultMaxContextBytes {
+		t.Fatalf("silence must produce defaults, got timeout=%v out=%d ctx=%d", stated.Timeout.Duration, stated.MaxOutput, stated.MaxContext)
+	}
+
+	for name, document := range map[string]string{
+		"zero timeout":     base + `,"timeout":"0s"}`,
+		"zero output":      base + `,"max_output_bytes":0}`,
+		"zero context":     base + `,"max_context_bytes":0}`,
+		"negative output":  base + `,"max_output_bytes":-1}`,
+		"negative context": base + `,"max_context_bytes":-1}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			if got, err := DecodeTaskManifest(strings.NewReader(document)); err == nil {
+				t.Fatalf("a stated zero bound was widened to timeout=%v out=%d ctx=%d",
+					got.Timeout.Duration, got.MaxOutput, got.MaxContext)
+			}
+		})
+	}
+
+	// A stated bound within its range must survive untouched.
+	explicit, err := DecodeTaskManifest(strings.NewReader(base + `,"timeout":"7s","max_output_bytes":128,"max_context_bytes":256}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if explicit.Timeout.Duration != 7*time.Second || explicit.MaxOutput != 128 || explicit.MaxContext != 256 {
+		t.Fatalf("stated bounds were rewritten: timeout=%v out=%d ctx=%d", explicit.Timeout.Duration, explicit.MaxOutput, explicit.MaxContext)
+	}
+
+	// Prepare reads a Go value, where a zero field is silence rather than a
+	// stated bound, so it must still default.
+	prepared, err := TaskManifest{
+		SchemaVersion: TaskSchemaVersion, ID: "probe",
+		Instructions: []string{"AGENTS.md"}, Command: []string{"/bin/true"},
+		Acceptance: TaskAcceptance{ExitCodes: []int{0}},
+	}.Prepare()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if prepared.MaxOutput != DefaultMaxOutputBytes {
+		t.Fatalf("a Go literal's zero field must still default, got %d", prepared.MaxOutput)
+	}
+}

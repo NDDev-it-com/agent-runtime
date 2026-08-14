@@ -19,6 +19,7 @@ func main() {
 	resultPath := flag.String("result", "", "exclusive path for the machine-readable build result")
 	verifyResult := flag.String("verify-result", "", "validate a build result against --out")
 	expectVersion := flag.String("expect-version", "", "required triggering tag version")
+	expectCommit := flag.String("expect-commit", "", "independently resolved commit the bundle must have been built from")
 	flag.Parse()
 	c, err := releasecontract.Load(*contractPath)
 	if err != nil {
@@ -52,11 +53,21 @@ func main() {
 		if *out == "" {
 			fail(fmt.Errorf("--out is required with --verify-result"))
 		}
+		// The expected commit must come from outside the receipt. Resolving it
+		// here from the checkout, rather than reading it back out of the file
+		// under test, is what makes the source-to-artifact claim provable.
+		expected := *expectCommit
+		if expected == "" {
+			expected, err = releasecontract.ResolveCommit(root, *commit)
+			if err != nil {
+				fail(err)
+			}
+		}
 		result, err := releasecontract.LoadBuildResult(*verifyResult)
 		if err != nil {
 			fail(err)
 		}
-		if err := releasecontract.ValidateBuildResult(result, *out, c); err != nil {
+		if err := releasecontract.ValidateBuildResult(result, *out, c, expected); err != nil {
 			fail(err)
 		}
 		fmt.Printf("release build result valid: %s\n", *verifyResult)

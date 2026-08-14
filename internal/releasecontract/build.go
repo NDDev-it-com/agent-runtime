@@ -104,15 +104,30 @@ func Build(root, commit, out string, c Contract) error {
 	return err
 }
 
+// ResolveCommit turns a revision into the canonical commit it names, reading
+// the checkout rather than anything under verification. Verification needs an
+// expected commit from a source the object being checked cannot influence, and
+// this is that source.
+func ResolveCommit(root, revision string) (string, error) {
+	resolved, err := git(root, "rev-parse", "--verify", revision+"^{commit}")
+	if err != nil {
+		return "", fmt.Errorf("resolve source commit: %w", err)
+	}
+	resolved = strings.TrimSpace(resolved)
+	if !commitPattern.MatchString(resolved) {
+		return "", fmt.Errorf("resolved commit %q is not canonical", resolved)
+	}
+	return resolved, nil
+}
+
 func BuildWithResult(root, commit, out string, c Contract) (BuildResult, error) {
 	if err := c.Validate(); err != nil {
 		return BuildResult{}, err
 	}
-	resolved, err := git(root, "rev-parse", "--verify", commit+"^{commit}")
+	resolved, err := ResolveCommit(root, commit)
 	if err != nil {
-		return BuildResult{}, fmt.Errorf("resolve source commit: %w", err)
+		return BuildResult{}, err
 	}
-	resolved = strings.TrimSpace(resolved)
 	commitTimeRaw, err := git(root, "show", "-s", "--format=%ct", resolved)
 	if err != nil {
 		return BuildResult{}, err
@@ -136,7 +151,7 @@ func BuildWithResult(root, commit, out string, c Contract) (BuildResult, error) 
 	if err := publishBundle(out, c, assets); err != nil {
 		return BuildResult{}, err
 	}
-	if err := ValidateBuildResult(result, out, c); err != nil {
+	if err := ValidateBuildResult(result, out, c, resolved); err != nil {
 		return BuildResult{}, fmt.Errorf("validate published build result: %w", err)
 	}
 	return result, nil

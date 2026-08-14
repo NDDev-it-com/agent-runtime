@@ -6,7 +6,52 @@ contract.
 
 ## [Unreleased]
 
+### Fixed
+
+- A release receipt can no longer attest its own source commit. Verification
+  rejected only an empty `source_commit` and then derived the receipt it
+  expected from the candidate, so replacing that field with any other forty hex
+  characters left `check-release-contract` reporting the bundle valid while it
+  claimed a build from a commit that need not exist. The expected commit is now
+  resolved from the checkout, bound to the annotated tag and cross-checked
+  against the release manifest travelling inside the bundle.
+- A Task manifest that states a zero bound is refused instead of widened. On the
+  wire, `"timeout": "0s"` and an absent field decode identically in Go, so the
+  narrowest possible request was granted the widest possible default: five
+  minutes, and a mebibyte each of output and context. A negative value was
+  already refused, which made zero the only way to fail open. Defaults now apply
+  only to bounds a document left silent; a Go struct literal still reads its
+  zero fields as silence, because the language records nothing else.
+- `schemas/release-build-result-v1alpha1.schema.json` required `v0.1.0` while
+  the producer emitted `v0.1.3`, so a real receipt failed the schema published
+  to describe it. Both release schemas are now pinned to the contract version.
+
 ### Changed
+
+- Schema parity is executed rather than sampled. The previous test reflected
+  over a handful of chosen constants, and the build-result version was simply
+  not among them, so it drifted across three releases with every test green.
+  Tracked documents are now validated against their published schema with a
+  draft-2020-12 validator, and each semantic mutation of a Task manifest must be
+  rejected by the schema and by Go alike — a schema that accepts what the
+  runtime refuses splits the producer from the consumer as surely as one that
+  refuses what the runtime produces.
+- Patterns that constrained nothing are typed. Five `pattern` keywords across
+  two schemas had no `type`, and a pattern only applies to strings, so a version
+  of `12345` or a source commit that was an object passed unexamined.
+- `required_checks` in the governance schema had a length and no shape. It now
+  states both producer forms exactly, each forbidding the other's fields, which
+  is what the Go validator already enforced.
+- The release contract distinguishes the build closure from the verified module
+  graph. `go.sum` pins a dependency's own requirements even when nothing here
+  compiles them, and asserting the two sets were identical forced a test-only
+  module of a dependency to be recorded as if this module depended on it.
+  `graph_only_modules` names those pins, and both closures stay exact.
+- `docs/releasing.md` no longer claims the tag workflow rejects disabled
+  immutable releases. It cannot: that endpoint needs admin read and the
+  publishing token is deliberately held to `contents`, `id-token` and
+  attestation scopes. The pre-tag step is the only check of that setting, it is
+  manual, and the guide now says so.
 
 - The CI, release and governance contracts are proven against a parsed GitHub
   Actions model instead of the workflow text. All three verifiers matched

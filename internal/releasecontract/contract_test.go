@@ -321,7 +321,7 @@ func TestBuildResultBindsCanonicalArtifactClosure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := ValidateBuildResult(result, out, c); err != nil {
+	if err := ValidateBuildResult(result, out, c, result.SourceCommit); err != nil {
 		t.Fatal(err)
 	}
 	if result.SchemaVersion != BuildResultSchemaVersion || len(result.Assets) != len(c.Assets.Names()) {
@@ -356,7 +356,7 @@ func TestBuildResultBindsCanonicalArtifactClosure(t *testing.T) {
 			if reflect.DeepEqual(candidate, result) {
 				t.Fatal("mutation did not change candidate")
 			}
-			if ValidateBuildResult(candidate, out, c) == nil {
+			if ValidateBuildResult(candidate, out, c, result.SourceCommit) == nil {
 				t.Fatal("invalid build result accepted")
 			}
 		})
@@ -432,7 +432,7 @@ func TestBuildResultRejectsMissingAndNullLicense(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if ValidateBuildResult(loaded, out, c) == nil {
+			if ValidateBuildResult(loaded, out, c, result.SourceCommit) == nil {
 				t.Fatal("license omission accepted")
 			}
 		})
@@ -451,7 +451,7 @@ func TestBuildResultRejectsSymlinkAssetAndResidue(t *testing.T) {
 	if err := os.Symlink(c.Assets.Archive, filepath.Join(out, "unexpected")); err != nil {
 		t.Fatal(err)
 	}
-	if ValidateBuildResult(result, out, c) == nil {
+	if ValidateBuildResult(result, out, c, result.SourceCommit) == nil {
 		t.Fatal("unexpected symlink residue accepted")
 	}
 }
@@ -691,7 +691,10 @@ func goModFromDependencies(contract Contract, dependencies []Dependency) string 
 func canonicalGoSum(contract Contract) string {
 	const digest = "h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 	var result strings.Builder
-	for _, dependency := range canonicalDependencies(contract.Dependencies) {
+	// go.sum spans the module graph, so a graph-only pin belongs here even
+	// though nothing builds it.
+	pinned := append(append([]Dependency{}, contract.Dependencies...), contract.GraphOnlyModules...)
+	for _, dependency := range canonicalDependencies(pinned) {
 		result.WriteString(dependency.ModulePath + " " + dependency.Version + " " + digest + "\n")
 		result.WriteString(dependency.ModulePath + " " + dependency.Version + "/go.mod " + digest + "\n")
 	}
@@ -794,4 +797,92 @@ func privateTempDir(t *testing.T) string {
 		t.Fatal(err)
 	}
 	return directory
+}
+
+// TestBuildResultCannotAttestItsOwnSourceCommit covers the defect where
+// verification derived the commit it expected from the receipt under test.
+// Only an empty source commit was rejected, so swapping the field for any other
+// forty hex characters left the bundle "valid" while it claimed a build from a
+// commit that need not exist. The expected commit must come from the checkout.
+func TestBuildResultCannotAttestItsOwnSourceCommit(t *testing.T) {
+	t.Parallel()
+	root := fixtureRepo(t)
+	c := testContract()
+	parent := privateTempDir(t)
+	out := filepath.Join(parent, "bundle")
+	result, err := BuildWithResult(root, "HEAD", out, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	honest := result.SourceCommit
+	if err := ValidateBuildResult(result, out, c, honest); err != nil {
+		t.Fatalf("honest receipt rejected: %v", err)
+	}
+
+	forged := result
+	forged.SourceCommit = "0123456789abcdef0123456789abcdef01234567"
+	if err := ValidateBuildResult(forged, out, c, honest); err == nil {
+		t.Error("a receipt naming a different commit was accepted")
+	}
+	// The forgery must not become acceptable by also supplying its own claim as
+	// the expectation: that is precisely the circularity being removed.
+	if err := ValidateBuildResult(forged, out, c, forged.SourceCommit); err == nil {
+		t.Error("a receipt was accepted as its own expected commit")
+	}
+
+	for name, expected := range map[string]string{
+		"empty":                           "",
+		"truncated":                       honest[:39],
+		"uppercase":                       strings.ToUpper(honest),
+		"not hex":                         strings.Repeat("z", 40),
+		"a revision rather than a commit": "HEAD",
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := ValidateBuildResult(result, out, c, expected); err == nil {
+				t.Fatalf("non-canonical expected commit %q accepted", expected)
+			}
+		})
+	}
+}
+
+// TestResolveCommitReadsTheCheckout pins the independent source the verifier
+// relies on.
+func TestResolveCommitReadsTheCheckout(t *testing.T) {
+	t.Parallel()
+	root := fixtureRepo(t)
+	resolved, err := ResolveCommit(root, "HEAD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !commitPattern.MatchString(resolved) {
+		t.Fatalf("resolved %q is not a canonical commit", resolved)
+	}
+	if _, err := ResolveCommit(root, "refs/heads/does-not-exist"); err == nil {
+		t.Error("an unresolvable revision was accepted")
+	}
+}
+
+// TestGraphOnlyModulesAreProvenNotAssumed pins the distinction the contract now
+// draws. go.sum spans the verified module graph while `dependencies` describes
+// what is actually built, and treating them as one set forced a dependency's
+// own test-only module to be recorded as if this module depended on it.
+func TestGraphOnlyModulesAreProvenNotAssumed(t *testing.T) {
+	t.Parallel()
+	c := testContract()
+	c.GraphOnlyModules = []Dependency{{ModulePath: "example.invalid/graph", Version: "v1.0.0", License: "MIT"}}
+	if err := c.verifyGoSum([]byte(canonicalGoSum(c))); err != nil {
+		t.Fatalf("a declared graph-only pin was rejected: %v", err)
+	}
+	// Undeclared entries must still fail: the point is an exact closure, not a
+	// relaxed one.
+	undeclared := canonicalGoSum(c) + "example.invalid/sneak v1.0.0 h1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=\n"
+	if c.verifyGoSum([]byte(undeclared)) == nil {
+		t.Fatal("an undeclared module in go.sum was accepted")
+	}
+	// A module cannot be claimed as both built and graph-only.
+	both := testContract()
+	both.GraphOnlyModules = []Dependency{both.Dependencies[0]}
+	if err := both.Validate(); err == nil {
+		t.Fatal("a module listed as both a dependency and graph-only was accepted")
+	}
 }

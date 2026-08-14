@@ -7,7 +7,8 @@ published — the first pinned a Go toolchain below the module's own directive,
 the second read the immutable-releases setting, which the publishing token
 cannot access. Both tags are immutable, so the first release carried the next
 free patch number. Step 8 below is the only place that
-setting is checked, because a maintainer runs it with an admin token. The repository
+setting is ever checked, and a maintainer must run it by hand with an admin
+token; no workflow can do it. The repository
 ships the Go module and tracked source, not prebuilt binaries or a platform
 matrix.
 
@@ -126,17 +127,30 @@ covers every other asset and deliberately does not checksum itself.
    pin supersedes.
 7. Merge a signed PR only after exact-head CI and CodeQL are green. Recheck the
    post-merge `main` runs and reread this contract.
-8. Confirm repository immutable releases are enabled, no tag/release exists,
-   and the clean local `main` equals `origin/main`.
+8. **Manual admin gate, and the only one.** Confirm repository immutable
+   releases are enabled with
+   `gh api repos/NDDev-it-com/agent-runtime/immutable-releases --jq '.enabled'`,
+   that no tag or release exists, and that the clean local `main` equals
+   `origin/main`. Nothing later re-checks the first of these.
 9. Create an annotated SSH-signed `v0.1.3` tag on that exact commit, verify it
    locally with `go run ./cmd/check-signature --tag "$(git rev-parse
    'v0.1.3^{tag}')" --expected-commit "$(git rev-parse
    'v0.1.3^{commit}')"`, and push only the tag.
 
-The tag workflow rejects reruns, wrong refs or versions, lightweight/unverified
-tags, a tag not equal to current `main`, disabled immutable releases, an
-existing release, drifted assets, or missing checks. PR/main jobs are read-only
-and never publish. The release job alone receives `contents: write`,
+The tag workflow rejects reruns, wrong refs or versions, lightweight or
+unverified tags, a tag not equal to current `main`, an existing release,
+drifted assets, a receipt naming a commit other than the tag's, or missing
+checks.
+
+It does **not** check whether immutable releases are enabled, and cannot: that
+endpoint needs admin read, and the publishing job's token is deliberately held
+to `contents`, `id-token` and attestation scopes. Step 8 above is the only
+check of that setting, and it is a manual one. Skipping it can produce a
+release whose assets are mutable, and nothing downstream will say so. The
+guarantee that the *tag* cannot be moved or deleted comes from the organisation
+ruleset instead, which does not depend on this workflow at all.
+
+PR/main jobs are read-only and never publish. The release job alone receives `contents: write`,
 `id-token: write`, `attestations: write`, and `artifact-metadata: write`; it
 uses no PAT, signing secret, environment or human approval gate.
 

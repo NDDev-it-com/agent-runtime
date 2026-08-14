@@ -8,9 +8,14 @@
     {"module_path": "github.com/ProtonMail/go-crypto", "version": "v1.4.1", "license": "BSD-3-Clause"},
     {"module_path": "github.com/cloudflare/circl", "version": "v1.6.5", "license": "BSD-3-Clause", "indirect": true},
     {"module_path": "github.com/goccy/go-yaml", "version": "v1.19.2", "license": "MIT"},
+    {"module_path": "github.com/santhosh-tekuri/jsonschema/v6", "version": "v6.0.3", "license": "Apache-2.0"},
     {"module_path": "golang.org/x/crypto", "version": "v0.55.0", "license": "BSD-3-Clause", "indirect": true},
     {"module_path": "golang.org/x/mod", "version": "v0.40.0", "license": "BSD-3-Clause"},
-    {"module_path": "golang.org/x/sys", "version": "v0.47.0", "license": "BSD-3-Clause"}
+    {"module_path": "golang.org/x/sys", "version": "v0.47.0", "license": "BSD-3-Clause"},
+    {"module_path": "golang.org/x/text", "version": "v0.41.0", "license": "BSD-3-Clause", "indirect": true}
+  ],
+  "graph_only_modules": [
+    {"module_path": "github.com/dlclark/regexp2", "version": "v1.11.0", "license": "MIT"}
   ],
   "source_commit": "HEAD",
   "archive_prefix": "agent-runtime-v0.1.3/",

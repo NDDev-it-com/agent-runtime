@@ -46,8 +46,21 @@ func newBuildResult(out, commit string, c Contract, assets map[string][]byte) (B
 	return result, nil
 }
 
-// ValidateBuildResult fails closed unless the receipt describes this exact bundle.
-func ValidateBuildResult(result BuildResult, out string, c Contract) error {
+// ValidateBuildResult fails closed unless the receipt describes this exact
+// bundle built from expectedCommit.
+//
+// expectedCommit must be resolved by the caller from something the receipt
+// cannot influence — the checkout, the annotated tag, the release manifest.
+// Passing the receipt's own value back in is the defect this parameter exists
+// to prevent: validation previously rejected only an empty source commit and
+// then derived the expected receipt from the candidate, so replacing
+// source_commit with any other forty hex characters left verification
+// reporting the bundle as valid while it asserted a build from a commit that
+// need not exist.
+func ValidateBuildResult(result BuildResult, out string, c Contract, expectedCommit string) error {
+	if !commitPattern.MatchString(expectedCommit) {
+		return errors.New("expected source commit must be a canonical 40-hex commit")
+	}
 	abs, err := filepath.Abs(out)
 	if err != nil {
 		return fmt.Errorf("resolve expected artifact root: %w", err)
@@ -56,7 +69,10 @@ func ValidateBuildResult(result BuildResult, out string, c Contract) error {
 	if err != nil {
 		return fmt.Errorf("canonicalize expected artifact root: %w", err)
 	}
-	if result.SchemaVersion != BuildResultSchemaVersion || result.ArtifactRoot != wantRoot || result.Version != c.Version || result.ModulePath != c.ModulePath || result.License != CanonicalLicense || result.License != c.License || result.SourceCommit == "" {
+	if result.SourceCommit != expectedCommit {
+		return fmt.Errorf("build result claims source commit %q, expected %q", result.SourceCommit, expectedCommit)
+	}
+	if result.SchemaVersion != BuildResultSchemaVersion || result.ArtifactRoot != wantRoot || result.Version != c.Version || result.ModulePath != c.ModulePath || result.License != CanonicalLicense || result.License != c.License {
 		return errors.New("build result identity mismatch")
 	}
 	assets, err := readBundleSecure(out, c)
@@ -66,12 +82,22 @@ func ValidateBuildResult(result BuildResult, out string, c Contract) error {
 	if err := verifyBundleData(assets, c); err != nil {
 		return err
 	}
-	want, err := newBuildResult(out, result.SourceCommit, c, assets)
+	want, err := newBuildResult(out, expectedCommit, c, assets)
 	if err != nil {
 		return err
 	}
 	if !reflect.DeepEqual(result, want) {
 		return errors.New("build result asset path/digest closure mismatch")
+	}
+	// The manifest travels inside the bundle and names the commit too. Binding
+	// them here means one asset cannot disagree with the receipt about what was
+	// built without failing.
+	var manifest Manifest
+	if err := json.Unmarshal(assets[c.Assets.Manifest], &manifest); err != nil {
+		return fmt.Errorf("decode release manifest: %w", err)
+	}
+	if manifest.SourceCommit != expectedCommit {
+		return fmt.Errorf("release manifest names source commit %q, expected %q", manifest.SourceCommit, expectedCommit)
 	}
 	return nil
 }
