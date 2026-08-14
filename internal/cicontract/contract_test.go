@@ -194,6 +194,10 @@ func TestReleaseLaneTracksTheCompatibilityToolchain(t *testing.T) {
 			strings.Replace(string(workflow), "go-version: '1.25.x'", "go-version: '1.26.x'", 1),
 			"differs from compatibility Go",
 		},
+		"reads a setting the token cannot access": {
+			strings.Replace(string(workflow), "if gh release view", "test \"$(gh api \"repos/${GITHUB_REPOSITORY}/immutable-releases\" --jq '.enabled')\" = true\n          if gh release view", 1),
+			"no admin access",
+		},
 		"no release job": {
 			strings.Replace(string(workflow), "\n  release:\n", "\n  publish:\n", 1),
 			"job release not found",

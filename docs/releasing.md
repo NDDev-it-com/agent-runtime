@@ -1,10 +1,12 @@
 # Releasing the Go module/source product
 
 `release/v1alpha1.json` is the only release source of truth. The first published
-version is `v0.1.1`; the compatibility declaration is Go 1.25. `v0.1.0` was
-tagged but never published — the release job pinned a Go toolchain below the
-module's own directive and failed before building, and the tag is immutable, so
-the first release carries the next patch number. The repository
+version is `v0.1.2`; the compatibility declaration is Go 1.25. `v0.1.0` and
+`v0.1.1` were tagged but never published — the first pinned a Go toolchain below
+the module's own directive, the second read the immutable-releases setting,
+which the publishing token cannot access. Both tags are immutable, so the first
+release carries the next free patch number. Step 8 below is the only place that
+setting is checked, because a maintainer runs it with an admin token. The repository
 ships the Go module and tracked source, not prebuilt binaries or a platform
 matrix.
 
@@ -12,10 +14,10 @@ matrix.
 
 The exact release asset set is:
 
-- `agent-runtime-v0.1.1-source.tar.gz`
-- `agent-runtime-v0.1.1.spdx.json`
-- `release-notes-v0.1.1.md`
-- `release-manifest-v0.1.1.json`
+- `agent-runtime-v0.1.2-source.tar.gz`
+- `agent-runtime-v0.1.2.spdx.json`
+- `release-notes-v0.1.2.md`
+- `release-manifest-v0.1.2.json`
 - `SHA256SUMS`
 
 The builder reads the exact Git commit tree. It rejects symlinks, gitlinks,
@@ -125,10 +127,10 @@ covers every other asset and deliberately does not checksum itself.
    post-merge `main` runs and reread this contract.
 8. Confirm repository immutable releases are enabled, no tag/release exists,
    and the clean local `main` equals `origin/main`.
-9. Create an annotated SSH-signed `v0.1.1` tag on that exact commit, verify it
+9. Create an annotated SSH-signed `v0.1.2` tag on that exact commit, verify it
    locally with `go run ./cmd/check-signature --tag "$(git rev-parse
-   'v0.1.1^{tag}')" --expected-commit "$(git rev-parse
-   'v0.1.1^{commit}')"`, and push only the tag.
+   'v0.1.2^{tag}')" --expected-commit "$(git rev-parse
+   'v0.1.2^{commit}')"`, and push only the tag.
 
 The tag workflow rejects reruns, wrong refs or versions, lightweight/unverified
 tags, a tag not equal to current `main`, disabled immutable releases, an
@@ -143,10 +145,10 @@ Download all five assets, then run:
 
 ```sh
 sha256sum -c SHA256SUMS
-gh attestation verify agent-runtime-v0.1.1-source.tar.gz -R NDDev-it-com/agent-runtime
-gh attestation verify agent-runtime-v0.1.1.spdx.json -R NDDev-it-com/agent-runtime
-gh attestation verify release-notes-v0.1.1.md -R NDDev-it-com/agent-runtime
-gh attestation verify release-manifest-v0.1.1.json -R NDDev-it-com/agent-runtime
+gh attestation verify agent-runtime-v0.1.2-source.tar.gz -R NDDev-it-com/agent-runtime
+gh attestation verify agent-runtime-v0.1.2.spdx.json -R NDDev-it-com/agent-runtime
+gh attestation verify release-notes-v0.1.2.md -R NDDev-it-com/agent-runtime
+gh attestation verify release-manifest-v0.1.2.json -R NDDev-it-com/agent-runtime
 gh attestation verify SHA256SUMS -R NDDev-it-com/agent-runtime
 ```
 

@@ -6,7 +6,7 @@ contract.
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-08-14
+## [0.1.2] - 2026-08-14
 
 ### Added
 
@@ -105,6 +105,13 @@ contract.
 
 ### Fixed
 
+- The publish job no longer reads the immutable-releases setting. That endpoint
+  requires admin read access, which the release token does not have and must not
+  be given, so the step failed with HTTP 403 after the contract, tag signature
+  and provenance had all verified — and the `v0.1.1` tag was burned the same way
+  `v0.1.0` was. The guarantee comes from the organisation ruleset
+  `immutable release tags` and from the pre-tag gate, neither of which depends on
+  that token; `check-ci-contract` now refuses the endpoint in this lane.
 - The release workflow builds again. It pinned Go 1.24 while the module declares
   `go 1.25.0`, so the publish job failed at its first step with
   `go.mod requires go >= 1.25.0 (running go 1.24.13; GOTOOLCHAIN=local)` and
@@ -216,6 +223,13 @@ contract.
   of which existed in the database when the lane was pinned. All three are fixed
   in 1.26.6, and the scan is clean on it.
 
+## [0.1.1] - 2026-08-14
+
+Tagged, never published. The release job read the immutable-releases setting,
+which its token cannot access, and failed with HTTP 403 before building an
+asset. The tag and its Go module proxy entry are immutable, so it is left in
+place with no assets and no attestations.
+
 ## [0.1.0] - 2026-08-14
 
 Tagged, never published. The release job could not run, and both the tag and the
@@ -223,6 +237,7 @@ Go module proxy entry for `v0.1.0` are immutable, so the tag is left in place an
 the first published release is `v0.1.1`. Everything listed under `[0.1.1]` was
 already present at this tag; only the release lane differs.
 
-[Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.1...HEAD
-[0.1.1]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.1
+[Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.2
+[0.1.1]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.1 (tag only; no release)
 [0.1.0]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.0 (tag only; no release)
