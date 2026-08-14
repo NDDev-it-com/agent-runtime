@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 8,
+  "revision": 14,
   "goal": {
     "id": "release-proof-chain",
     "intent": "Release receipts and published schemas prove source identity against an independent source",
@@ -8,36 +8,95 @@
       {
         "id": "independent-commit",
         "acceptance": "ValidateBuildResult receives an independently resolved expected commit bound to checkout, tag and manifest",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/releasecontract/result.go; internal/releasecontract/build.go ResolveCommit",
+            "result": "The expected commit is resolved from the checkout, passed explicitly, bound to the annotated tag in the release workflow and cross-checked against the manifest inside the bundle."
+          }
+        ]
       },
       {
         "id": "receipt-mutation-dies",
         "acceptance": "A receipt whose source_commit is replaced fails verification",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestBuildResultCannotAttestItsOwnSourceCommit",
+            "result": "A receipt naming another commit is refused, including when offered as its own expectation; non-canonical expectations are refused too."
+          }
+        ]
       },
       {
         "id": "schema-truth",
         "acceptance": "Build-result version const, untyped pattern fields and governance required_checks item shape are correct",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "schemas/release-build-result-v1alpha1.schema.json; release-manifest; release-contract; repository-governance",
+            "result": "Build-result version matches the contract, five pattern keywords are typed, and required_checks states both producer forms as a oneOf."
+          }
+        ]
       },
       {
         "id": "bidirectional-parity",
         "acceptance": "A real draft-2020-12 validator proves schema and Go accept and reject the same documents",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestTrackedDocumentsSatisfyTheirPublishedSchema; TestSchemaAndGoRejectTheSameDocuments",
+            "result": "Every tracked document validates under a draft-2020-12 validator and nine manifest mutations are refused by the schema and by Go alike."
+          }
+        ]
       },
       {
         "id": "honest-docs",
         "acceptance": "The release guide states only gates that exist",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "docs/releasing.md",
+            "result": "The guide states the tag workflow does not and cannot check the immutable-releases setting, and marks the manual pre-tag step as the only one."
+          }
+        ]
       }
     ],
     "non_goals": [
       "Rewrite the v0.1.3 tag, assets or sealed changelog section",
       "Grant the publishing job admin read"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Merged as PR #55 with all four required checks green on the exact head.",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/55",
+            "result": "Merged to main."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:31:04.581271987Z",
+        "closure": {
+          "achieved_outcome": "A release receipt is checked against a commit it cannot choose, and the published schemas are executed against real documents rather than sampled.",
+          "cleanup": "Task branch deleted locally and on origin.",
+          "remaining": [],
+          "next_work": [
+            {
+              "type": "issue",
+              "reference": "runtime bounds truth",
+              "result": "Close the Task and Goal semantics the review found: pending-item evidence poisoning, exit/cancel misattribution, the UTF-8 output overrun and descendant process ownership."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Verified the new version pin actually fails: reintroducing the exact historical drift by setting the build-result schema back to v0.1.0 turns the parity test red with the reason named.",
@@ -124,6 +183,6 @@
       }
     },
     "created_at": "2026-08-14T23:25:56.314773629Z",
-    "updated_at": "2026-08-14T23:25:56.590045136Z"
+    "updated_at": "2026-08-14T23:31:04.581271987Z"
   }
 }
