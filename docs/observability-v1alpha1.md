@@ -50,6 +50,19 @@ denies `confidential`, `secret`, unknown sensitivity, binary data, invalid/cycli
 or unsupported structures, errors, formatters/stringers, raw commands,
 environment/provider content, credentials, tokens, and URLs.
 
+Redaction is driven by that vocabulary, not by inspecting a value for the shape
+of a secret. An attribute named `private_key`, `secret`, `token`, `password` or
+`credential` is redacted whatever it holds; an attribute named `note` or
+`payload` is published whatever it holds. `-----BEGIN OPENSSH PRIVATE KEY-----`
+carried under a neutral name reaches the sink verbatim, with an empty
+`redactions` list.
+
+Naming the attribute and declaring its sensitivity honestly is therefore the
+caller's responsibility, and `SECURITY.md` says to treat every attribute as
+potentially secret for that reason. The emitter is not a content scanner and
+does not attempt entropy or pattern detection, which would be both incomplete
+and a source of false positives on ordinary output.
+
 The word list applies to attribute names, nested keys and values. It is not
 applied to identities. A runtime, sink, correlation, subject or actor identifier
 is validated against the identity grammar only, because an identifier carries no

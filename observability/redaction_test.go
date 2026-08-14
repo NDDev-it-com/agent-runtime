@@ -3,6 +3,8 @@
 package observability
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -114,4 +116,48 @@ func FuzzRedactionNeverLeaksDeniedValue(f *testing.F) {
 			t.Fatal("denied value leaked")
 		}
 	})
+}
+
+// TestRedactionIsVocabularyDrivenNotContentDriven pins the boundary
+// docs/observability-v1alpha1.md documents: the policy decides from the
+// attribute's name and the word list, not from the shape of its value. The
+// emitter is not a secret scanner, and a caller that names an attribute
+// dishonestly gets its value published. Stating that in prose alone would let
+// the behaviour drift away from the promise in either direction.
+func TestRedactionIsVocabularyDrivenNotContentDriven(t *testing.T) {
+	t.Parallel()
+	const secret = "-----BEGIN OPENSSH PRIVATE KEY-----"
+
+	for name, redactedByName := range map[string]bool{
+		"private_key": true,
+		"secret":      true,
+		"token":       true,
+		"password":    true,
+		"credential":  true,
+		"payload":     false,
+		"note":        false,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			memory, _ := NewMemorySink("memory", 4)
+			emitter := testEmitter(t, memory)
+			draft := testDraft()
+			draft.Attributes = []InputAttribute{{Name: name, Sensitivity: SensitivityInternal, Value: secret}}
+			event, _, err := emitter.Emit(context.Background(), draft)
+			if err != nil {
+				t.Fatalf("emit: %v", err)
+			}
+			encoded, err := event.MarshalJSON()
+			if err != nil {
+				t.Fatal(err)
+			}
+			published := bytes.Contains(encoded, []byte(secret))
+			if redactedByName && published {
+				t.Fatalf("attribute %q published the value verbatim", name)
+			}
+			if !redactedByName && !published {
+				t.Fatalf("attribute %q was redacted; the policy is documented as vocabulary-driven", name)
+			}
+		})
+	}
 }
