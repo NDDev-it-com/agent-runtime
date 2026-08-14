@@ -23,6 +23,18 @@ contract.
   honestly is the caller's job — a private key under a neutral name is published
   verbatim. A test now pins the second boundary in both directions.
 
+### Fixed
+
+- `check-provenance --integration` no longer fails on a timestamp race. It
+  required GitHub's `verified_at` to be at or after the pull request's
+  `merged_at`, but `verified_at` records when GitHub *computed* the
+  verification, not when the commit was signed, and the API guarantees nothing
+  about their order. Across twenty integrations it ran from `merged_at+0s` to
+  `merged_at+144s` and once landed at `merged_at-1s`, turning a green `main`
+  red and blocking releases for no reason. The binding that matters — the byte
+  comparison against the local commit payload, which carries the tree and parent
+  SHAs, and OpenPGP verification against the pinned key — is unchanged.
+
 ## [0.1.2] - 2026-08-14
 
 ### Added

@@ -626,6 +626,35 @@ func TestLocalCommitIdentityMatchesRESTExactly(t *testing.T) {
 	}
 }
 
+// TestProviderVerificationClockSkewIsNotEvidence covers the ordering this
+// verifier used to require. GitHub's verified_at records when it computed the
+// verification, not when the commit was signed, and the API guarantees nothing
+// about its order relative to merged_at. Across twenty integrations on this
+// repository it ranged from merged_at+0s to merged_at+144s and once landed at
+// merged_at-1s, which failed a green main and blocked a release for no reason.
+//
+// What binds the evidence to the commit is the byte comparison against the
+// local payload, which carries the tree and parent SHAs, and the OpenPGP
+// verification against the pinned key — neither of which a timestamp improves.
+func TestProviderVerificationClockSkewIsNotEvidence(t *testing.T) {
+	t.Parallel()
+	merged := time.Date(2026, 8, 14, 16, 49, 45, 0, time.UTC)
+	for name, verifiedAt := range map[string]time.Time{
+		"one second before the merge": merged.Add(-time.Second),
+		"same second as the merge":    merged,
+		"two minutes after":           merged.Add(2 * time.Minute),
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			v := apiVerification{Verified: true, Reason: "valid", VerifiedAt: verifiedAt, Payload: "payload", Signature: "signature"}
+			err := verifyIntegrationSignatureEvidence(t.TempDir(), Contract{}, v, []byte("payload"), []byte("signature"), merged)
+			if err != nil && strings.Contains(err.Error(), "absent, partial, or invalid") {
+				t.Fatalf("verified_at %s rejected as metadata: %v", verifiedAt.Sub(merged), err)
+			}
+		})
+	}
+}
+
 func TestProviderVerificationMetadataFailsClosed(t *testing.T) {
 	t.Parallel()
 	merged := time.Date(2026, 8, 13, 17, 33, 45, 0, time.UTC)
@@ -634,7 +663,6 @@ func TestProviderVerificationMetadataFailsClosed(t *testing.T) {
 		"unverified":          func(v *apiVerification) { v.Verified = false },
 		"wrong reason":        func(v *apiVerification) { v.Reason = "unknown_key" },
 		"missing verified at": func(v *apiVerification) { v.VerifiedAt = time.Time{} },
-		"stale verified at":   func(v *apiVerification) { v.VerifiedAt = merged.Add(-time.Second) },
 		"missing payload":     func(v *apiVerification) { v.Payload = "" },
 		"missing signature":   func(v *apiVerification) { v.Signature = "" },
 		"substituted payload": func(v *apiVerification) { v.Payload = "different" },

@@ -270,8 +270,15 @@ func VerifyIntegration(ctx context.Context, request VerifyRequest) (Result, erro
 }
 
 func verifyIntegrationSignatureEvidence(root string, contract Contract, verification apiVerification, localPayload, localSignature []byte, mergedAt time.Time) error {
-	if !verification.Verified || verification.Reason != "valid" || verification.VerifiedAt.IsZero() || verification.VerifiedAt.Before(mergedAt) {
-		return errors.New("integration signature API evidence is absent, partial, stale, or invalid")
+	// verified_at is when GitHub computed the verification, not when the commit
+	// was signed, and its order relative to merged_at is not guaranteed by the
+	// API. Observed across twenty integrations on this repository it ran from
+	// merged_at+0s to merged_at+144s, and once at merged_at-1s, which failed a
+	// green main for no reason. Freshness is not what binds this evidence to
+	// this commit: the byte comparison against the local payload below does,
+	// and that payload carries the tree and parent SHAs.
+	if !verification.Verified || verification.Reason != "valid" || verification.VerifiedAt.IsZero() {
+		return errors.New("integration signature API evidence is absent, partial, or invalid")
 	}
 	providerPayload := []byte(verification.Payload)
 	providerSignature := []byte(verification.Signature)
