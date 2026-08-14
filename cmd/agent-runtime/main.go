@@ -33,7 +33,11 @@ func main() {
 
 func run(args []string, stdout, stderr io.Writer) error {
 	if len(args) == 0 {
-		return usage(stderr)
+		// Usage on an empty invocation is a caller error, not a successful run.
+		if err := usage(stderr); err != nil {
+			return err
+		}
+		return errors.New("a command is required")
 	}
 	switch args[0] {
 	case "task":

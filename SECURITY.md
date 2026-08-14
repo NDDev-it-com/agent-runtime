@@ -47,7 +47,10 @@ lock or replaces directories concurrently.
 
 Treat every lifecycle attribute as untrusted and potentially secret. Sensitivity
 labels are an additional control, not permission to persist credentials: unsafe
-names and values are denied at every sensitivity. Events intentionally exclude
+names and values are denied at every sensitivity, and an emitter refuses a
+maximum sensitivity above `internal` outright. Identities — runtime, sink,
+correlation, subject and actor names — are validated against their grammar and
+are not attribute values; do not place secrets in them. Events intentionally exclude
 Task output, instruction context, command arguments, environment values, Goal
 prose, provider payloads, raw errors, and raw sink failures.
 

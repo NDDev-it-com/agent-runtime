@@ -229,6 +229,12 @@ func TestJSONLPermissionsSymlinkVersionAndFileBound(t *testing.T) {
 	if err := os.WriteFile(insecure, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	// WriteFile applies the process umask, so the mode under test must be set
+	// explicitly or a restrictive umask silently makes the fixture private and
+	// this assertion tests nothing.
+	if err := os.Chmod(insecure, 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := OpenJSONLSink(insecure, JSONLOptions{Name: "file"}); !sinkCode(err, SinkFailure) {
 		t.Fatalf("permissions error=%v", err)
 	}

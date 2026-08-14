@@ -27,8 +27,10 @@ protocol, scheduler, or operating-system sandbox.
 
 Requires Go 1.24 or newer.
 
+No version has been published yet, so install from source:
+
 ```sh
-go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.0
+go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@main
 agent-runtime task validate --manifest examples/basic/agent.json --workspace examples/basic
 agent-runtime task run --manifest examples/basic/agent.json --workspace examples/basic
 ```
@@ -37,7 +39,7 @@ The command receives the assembled instruction context on standard input. Its
 combined standard output and standard error are returned as one JSON object:
 
 ```json
-{"agent_id":"example","exit_code":0,"duration_ms":2,"output":"...","truncated":false,"timed_out":false,"accepted":true}
+{"agent_id":"example","exit_code":0,"duration_ms":2,"output":"...","truncated":false,"timed_out":false,"cancelled":false,"accepted":true}
 ```
 
 ## Task contract
@@ -69,6 +71,14 @@ invalid identifiers, and unsupported versions are rejected.
 
 Defaults are a five-minute timeout and 1 MiB each for context and captured
 output. Maximums are 24 hours, 16 MiB of context, and 64 MiB of output.
+`max_context_bytes` bounds the read itself, not only the assembled result, so an
+instruction file larger than the budget is rejected from its metadata without
+being loaded.
+
+A run that ends early reports why. `timed_out` means the manifest timeout
+elapsed; `cancelled` means the caller ended the run, either by cancelling its
+context or by reaching its own deadline. The two are never conflated, and the
+returned error wraps the caller's cause so `errors.Is` still works.
 
 The canonical distributable schema is
 [`schemas/task-manifest-v1alpha1.schema.json`](schemas/task-manifest-v1alpha1.schema.json).
@@ -76,13 +86,14 @@ The canonical distributable schema is
 ## Releases
 
 The project is released as a Go module/source product. It does not publish
-prebuilt platform binaries. Install the reference CLI with:
+prebuilt platform binaries.
 
-```sh
-go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.0
-```
+**No release exists yet.** The repository has no tag and no GitHub release, so
+`@v0.1.0` does not resolve; use `@main` or an exact commit until the first
+version is published. The release machinery below is implemented and exercised
+on every pull request as a dry run, but it has never published.
 
-Each tag-only release contains one deterministic tracked-source archive, an
+Each tag-only release will contain one deterministic tracked-source archive, an
 SPDX 2.3 JSON SBOM, canonical release notes, a release manifest, and
 `SHA256SUMS`. The annotated signed tag identifies the exact `main` commit;
 each dry-run or publication build also emits a versioned machine-readable build
@@ -138,7 +149,10 @@ The canonical distributable schema is
 [`schemas/goal-journal-v1alpha1.schema.json`](schemas/goal-journal-v1alpha1.schema.json).
 
 Evidence discovered later can be appended to an existing receipt with
-`goal evidence`; receipt summaries and existing evidence remain immutable.
+`goal evidence`; receipt summaries and existing evidence remain immutable. The
+`--*-type`, `--*-ref` and `--*-result` flags are repeatable and positional with
+respect to each other, so one command can record several evidence records; an
+unequal count is rejected rather than silently truncated.
 
 The journal is designed for durable evidence, so commit it when it represents
 public project work. The adjacent `*.lock` file is ephemeral and ignored.

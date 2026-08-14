@@ -17,7 +17,11 @@ The exact release asset set is:
 
 The builder reads the exact Git commit tree. It rejects symlinks, gitlinks,
 special files, unsafe or colliding paths and bounded-size violations. Tar and
-gzip order, ownership, modes and timestamps are normalized. The SPDX 2.3 JSON
+gzip order, ownership, modes and timestamps are normalized. The published stage
+directory and every published asset also have their modes set explicitly, because
+`O_CREAT` and `mkdirat` subtract the process umask from a requested mode: without
+that, release output would depend on the shell that produced it and a host with a
+restrictive umask could not build at all. The SPDX 2.3 JSON
 inventories every archived file; the manifest binds release, commit, module,
 Go baseline, workflow, pinned actions and content-asset digests. `SHA256SUMS`
 covers every other asset and deliberately does not checksum itself.

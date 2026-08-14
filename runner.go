@@ -22,8 +22,15 @@ type Result struct {
 	Output     string `json:"output"`
 	Truncated  bool   `json:"truncated"`
 	TimedOut   bool   `json:"timed_out"`
+	Cancelled  bool   `json:"cancelled"`
 	Accepted   bool   `json:"accepted"`
 }
+
+// errTaskTimeout attributes a termination to the manifest timeout. A caller
+// deadline and the manifest timeout both surface as context.DeadlineExceeded on
+// the derived context, so the cancellation cause is the only thing that can tell
+// them apart.
+var errTaskTimeout = errors.New("task timeout exceeded")
 
 type Runner struct {
 	Workspace Workspace
@@ -52,7 +59,7 @@ func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) 
 		lookup = os.LookupEnv
 	}
 
-	runCtx, cancel := context.WithTimeout(ctx, manifest.Timeout.Duration)
+	runCtx, cancel := context.WithTimeoutCause(ctx, manifest.Timeout.Duration, errTaskTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(runCtx, manifest.Command[0], manifest.Command[1:]...)
 	cmd.WaitDelay = 2 * time.Second
@@ -63,7 +70,11 @@ func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) 
 	cmd.Stdout, cmd.Stderr = output, output
 	started := time.Now()
 	err = cmd.Run()
-	result := Result{AgentID: manifest.ID, ExitCode: 0, DurationMS: time.Since(started).Milliseconds(), Output: output.String(), Truncated: output.truncated, TimedOut: errors.Is(runCtx.Err(), context.DeadlineExceeded)}
+	cause := context.Cause(runCtx)
+	terminated := err != nil && cause != nil
+	result := Result{AgentID: manifest.ID, DurationMS: time.Since(started).Milliseconds(), Output: output.String(), Truncated: output.truncated}
+	result.TimedOut = terminated && errors.Is(cause, errTaskTimeout)
+	result.Cancelled = terminated && !result.TimedOut
 	if err == nil {
 		result.Accepted = accepted(manifest.Acceptance, result)
 		if result.Accepted {
@@ -78,7 +89,10 @@ func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) 
 		result.ExitCode = -1
 	}
 	if result.TimedOut {
-		return result, fmt.Errorf("agent %q timed out after %s", manifest.ID, manifest.Timeout.Duration)
+		return result, fmt.Errorf("Task %q exceeded its %s timeout", manifest.ID, manifest.Timeout.Duration)
+	}
+	if result.Cancelled {
+		return result, fmt.Errorf("Task %q was ended by its caller: %w", manifest.ID, cause)
 	}
 	result.Accepted = accepted(manifest.Acceptance, result)
 	if result.Accepted {

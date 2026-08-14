@@ -152,7 +152,7 @@ func buildBundleData(files []gitFile, resolved string, commitTime time.Time, c C
 		return bundleBuildError(err)
 	}
 	namespace := fmt.Sprintf("https://github.com/NDDev-it-com/agent-runtime/releases/tag/%s#spdx-%s", c.Version, resolved)
-	sbom, err := sbomBytes(files, c, resolved, commitTime, namespace)
+	sbom, err := sbomBytes(files, c, commitTime, namespace)
 	if err != nil {
 		return bundleBuildError(err)
 	}
@@ -339,7 +339,7 @@ func releaseNotes(files []gitFile, version string) ([]byte, error) {
 	return []byte(notes), nil
 }
 
-func sbomBytes(files []gitFile, c Contract, commit string, created time.Time, namespace string) ([]byte, error) {
+func sbomBytes(files []gitFile, c Contract, created time.Time, namespace string) ([]byte, error) {
 	descriptors := make([]memberDescriptor, 0, len(files))
 	for _, f := range files {
 		descriptors = append(descriptors, gitMemberDescriptor(f.Path, f.Mode, "blob", int64(len(f.Data))))
@@ -363,7 +363,6 @@ func sbomBytes(files []gitFile, c Contract, commit string, created time.Time, na
 		rels = append(rels, relationship{SPDXElementID: "SPDXRef-Package", RelationshipType: "DEPENDS_ON", RelatedSPDXElement: pkg.SPDXID})
 	}
 	doc := spdxDocument{SPDXVersion: "SPDX-2.3", DataLicense: "CC0-1.0", SPDXID: "SPDXRef-DOCUMENT", Name: "agent-runtime-" + c.Version, DocumentNamespace: namespace, CreationInfo: creationInfo{Created: created.Format(time.RFC3339), Creators: []string{"Tool: agent-runtime-release-v1alpha1"}}, Packages: packages, Files: spdxFiles, Relationships: rels}
-	_ = commit
 	return canonicalJSON(doc)
 }
 
