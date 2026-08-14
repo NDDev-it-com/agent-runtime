@@ -12,6 +12,11 @@ contract.
   `security-tools.json` alongside the vulnerability scanner. `check-ci-contract`
   verifies the pin is exact, is invoked only from that lane, and that the
   compatibility toolchain satisfies the linter's own minimum Go.
+- `task.cancelled` carries the `cancelled` outcome for a Task ended by its
+  caller, so the distinction the runtime now makes between a stopped Task and a
+  failed one reaches consumers. It requires cancellation error evidence, an
+  unaccepted result and no blocking evidence. A Task that exceeds its own
+  timeout stays `task.failed`.
 - `Result.Cancelled` distinguishes a caller-ended run from a Task that exceeded
   its own timeout.
 
@@ -46,6 +51,19 @@ contract.
 
 ### Fixed
 
+- The published `cancelled` outcome is reachable. `schemas/lifecycle-event-v1alpha1.schema.json`
+  advertised it to every consumer while no event kind mapped to it, so no
+  producer could ever emit it.
+- Signature and provenance verification runs in a checkout whose `.git` is a
+  pointer file. `internal/signatureverify` required `.git` to be a directory, so
+  a submodule or a linked worktree — the checkouts `docs/releasing.md` step 3
+  tells a maintainer to verify from — failed with `not a directory` before
+  reading a single Git object. The pointer's `gitdir:` target is now resolved and
+  held under the same no-follow, identity-bound discipline as the work tree, and
+  substituting the pointer after capture fails the run.
+- The quick start no longer instructs `go install ...@v0.1.0`. The repository has
+  no tag and no GitHub release, so that command failed for every reader; it now
+  installs from `@main` and says plainly that no version has been published.
 - Release output no longer depends on the umask of the shell that built it.
   `O_CREAT` and `mkdirat` subtract the process umask from a requested mode, so
   under `umask 077` every published asset was created `0600`, failed the

@@ -16,6 +16,9 @@ import (
 const (
 	maxAncestorComponents = 128
 	maxAliasTargetBytes   = 256
+	maxGitPointerBytes    = 4 << 10
+	gitEntryName          = ".git"
+	gitPointerPrefix      = "gitdir:"
 )
 
 type unixIdentity struct {
@@ -30,8 +33,9 @@ type unixIdentity struct {
 type filesystemObjectKind string
 
 const (
-	directoryObject filesystemObjectKind = "directory"
-	symlinkObject   filesystemObjectKind = "symlink"
+	directoryObject   filesystemObjectKind = "directory"
+	symlinkObject     filesystemObjectKind = "symlink"
+	regularFileObject filesystemObjectKind = "regular file"
 )
 
 type ancestorNode struct {
@@ -48,10 +52,26 @@ type ancestorAlias struct {
 	identity unixIdentity
 }
 
+type gitPointerNode struct {
+	identity unixIdentity
+	contents string
+	fd       int
+	closed   bool
+}
+
 type repositoryIdentity struct {
-	root    string
-	nodes   []ancestorNode
-	aliases []ancestorAlias
+	root string
+	// gitDirectory is the path Git must be given as --git-dir. It is
+	// root/.git for an ordinary checkout, and the resolved target of the
+	// .git pointer file for a submodule or a linked worktree.
+	gitDirectory string
+	nodes        []ancestorNode
+	aliases      []ancestorAlias
+	// pointer and linked are set only when .git is a pointer file. linked
+	// holds the ancestor identity of gitDirectory under the same discipline
+	// applied to the work tree itself.
+	pointer *gitPointerNode
+	linked  *repositoryIdentity
 	closeFD func(int) error
 }
 
@@ -60,6 +80,27 @@ func captureRepositoryIdentity(root string) (repositoryIdentity, error) {
 }
 
 func captureRepositoryIdentityWithPolicy(root string, policy aliasPolicy, closeFD func(int) error) (identity repositoryIdentity, rootErr error) {
+	identity, err := captureDirectoryChain(root, policy, closeFD)
+	if err != nil {
+		return identity, err
+	}
+	defer func() {
+		if rootErr != nil {
+			rootErr = errors.Join(rootErr, identity.close())
+		}
+	}()
+	if err := identity.bindGitDirectory(policy); err != nil {
+		return identity, err
+	}
+	if err := identity.revalidate(); err != nil {
+		return identity, err
+	}
+	return identity, nil
+}
+
+// captureDirectoryChain holds one descriptor per component of an absolute path,
+// refusing to follow links except where the platform alias policy authorises it.
+func captureDirectoryChain(root string, policy aliasPolicy, closeFD func(int) error) (identity repositoryIdentity, rootErr error) {
 	if !filepath.IsAbs(root) || filepath.Clean(root) != root {
 		return repositoryIdentity{}, errors.New("repository root must be one canonical absolute path")
 	}
@@ -132,22 +173,103 @@ func captureRepositoryIdentityWithPolicy(root string, policy aliasPolicy, closeF
 		}
 		identity.nodes = append(identity.nodes, ancestorNode{component: component, identity: stat, fd: fd})
 	}
-	gitFD, err := unix.Openat(identity.nodes[len(identity.nodes)-1].fd, ".git", unix.O_RDONLY|unix.O_CLOEXEC|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
+	return identity, nil
+}
+
+// bindGitDirectory resolves the repository's git directory. An ordinary checkout
+// has a .git directory, which is held as a further ancestor node. A submodule or
+// a linked worktree has a .git pointer file naming the directory elsewhere; that
+// target is held under the same no-follow, identity-bound discipline.
+func (identity *repositoryIdentity) bindGitDirectory(policy aliasPolicy) error {
+	parentFD := identity.nodes[len(identity.nodes)-1].fd
+	gitFD, err := unix.Openat(parentFD, gitEntryName, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_DIRECTORY|unix.O_NOFOLLOW, 0)
 	if err != nil {
-		return identity, fmt.Errorf("open repository .git without following links: %w", err)
+		if !errors.Is(err, unix.ENOTDIR) {
+			return fmt.Errorf("open repository %s without following links: %w", gitEntryName, err)
+		}
+		return identity.bindGitPointer(parentFD, policy)
 	}
 	gitStat, err := statFD(gitFD)
 	if err != nil {
-		return identity, errors.Join(err, closeFD(gitFD))
+		return errors.Join(err, identity.closeFD(gitFD))
 	}
 	if err := validateIdentity(directoryObject, gitStat, gitStat); err != nil {
-		return identity, errors.Join(fmt.Errorf("repository .git is unsafe: %w", err), closeFD(gitFD))
+		return errors.Join(fmt.Errorf("repository %s is unsafe: %w", gitEntryName, err), identity.closeFD(gitFD))
 	}
-	identity.nodes = append(identity.nodes, ancestorNode{component: ".git", identity: gitStat, fd: gitFD})
-	if err := identity.revalidate(); err != nil {
-		return identity, err
+	identity.nodes = append(identity.nodes, ancestorNode{component: gitEntryName, identity: gitStat, fd: gitFD})
+	identity.gitDirectory = filepath.Join(identity.root, gitEntryName)
+	return nil
+}
+
+func (identity *repositoryIdentity) bindGitPointer(parentFD int, policy aliasPolicy) (rootErr error) {
+	pointerFD, err := unix.Openat(parentFD, gitEntryName, unix.O_RDONLY|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
+	if err != nil {
+		return fmt.Errorf("open repository %s without following links: %w", gitEntryName, err)
 	}
-	return identity, nil
+	defer func() {
+		if rootErr != nil {
+			rootErr = errors.Join(rootErr, identity.closeFD(pointerFD))
+		}
+	}()
+	stat, err := statFD(pointerFD)
+	if err != nil {
+		return err
+	}
+	if err := validateIdentity(regularFileObject, stat, stat); err != nil {
+		return fmt.Errorf("repository %s pointer is unsafe: %w", gitEntryName, err)
+	}
+	contents, err := readGitPointer(pointerFD)
+	if err != nil {
+		return err
+	}
+	target, err := gitPointerTarget(contents, identity.root)
+	if err != nil {
+		return err
+	}
+	linked, err := captureDirectoryChain(target, policy, identity.closeFD)
+	if err != nil {
+		return fmt.Errorf("hold repository git directory %q: %w", target, err)
+	}
+	identity.pointer = &gitPointerNode{identity: stat, contents: contents, fd: pointerFD}
+	identity.linked = &linked
+	identity.gitDirectory = target
+	return nil
+}
+
+// readGitPointer reads the pointer through the held descriptor, so the bytes
+// parsed are the bytes of the inode whose identity was validated.
+func readGitPointer(fd int) (string, error) {
+	buffer := make([]byte, maxGitPointerBytes+1)
+	length, err := unix.Pread(fd, buffer, 0)
+	if err != nil {
+		return "", fmt.Errorf("read repository %s pointer: %w", gitEntryName, err)
+	}
+	if length == 0 || length > maxGitPointerBytes {
+		return "", fmt.Errorf("repository %s pointer is empty or exceeds its byte budget", gitEntryName)
+	}
+	return string(buffer[:length]), nil
+}
+
+func gitPointerTarget(contents, root string) (string, error) {
+	line := strings.TrimRight(contents, "\n")
+	if strings.ContainsAny(line, "\n\x00") {
+		return "", fmt.Errorf("repository %s pointer must be a single line", gitEntryName)
+	}
+	rest, found := strings.CutPrefix(line, gitPointerPrefix)
+	if !found {
+		return "", fmt.Errorf("repository %s pointer must begin with %q", gitEntryName, gitPointerPrefix)
+	}
+	target := strings.TrimSpace(rest)
+	if target == "" {
+		return "", fmt.Errorf("repository %s pointer names no target", gitEntryName)
+	}
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(root, target)
+	}
+	if target = filepath.Clean(target); !filepath.IsAbs(target) {
+		return "", fmt.Errorf("repository %s pointer target %q is not absolute", gitEntryName, target)
+	}
+	return target, nil
 }
 
 func (identity repositoryIdentity) revalidate() error {
@@ -186,6 +308,43 @@ func (identity repositoryIdentity) revalidate() error {
 	if err := identity.rewalk(); err != nil {
 		return fmt.Errorf("repository path identity changed: %w", err)
 	}
+	if identity.pointer != nil {
+		if err := identity.revalidatePointer(); err != nil {
+			return err
+		}
+		if err := identity.linked.revalidate(); err != nil {
+			return fmt.Errorf("repository git directory identity changed: %w", err)
+		}
+	}
+	return nil
+}
+
+// revalidatePointer proves the pointer file still has the identity and the
+// contents that produced gitDirectory, both through the held descriptor and
+// through the name, so neither the inode nor the entry can have been swapped.
+func (identity repositoryIdentity) revalidatePointer() error {
+	current, err := statFD(identity.pointer.fd)
+	if err != nil {
+		return fmt.Errorf("stat held repository %s pointer: %w", gitEntryName, err)
+	}
+	if err := validateIdentity(regularFileObject, identity.pointer.identity, current); err != nil {
+		return fmt.Errorf("held repository %s pointer identity changed: %w", gitEntryName, err)
+	}
+	contents, err := readGitPointer(identity.pointer.fd)
+	if err != nil {
+		return err
+	}
+	if contents != identity.pointer.contents {
+		return fmt.Errorf("repository %s pointer contents changed", gitEntryName)
+	}
+	var named unix.Stat_t
+	parentFD := identity.nodes[len(identity.nodes)-1].fd
+	if err := unix.Fstatat(parentFD, gitEntryName, &named, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		return fmt.Errorf("stat repository %s pointer by name: %w", gitEntryName, err)
+	}
+	if err := validateIdentity(regularFileObject, identity.pointer.identity, identityOfStat(named)); err != nil {
+		return fmt.Errorf("repository %s pointer was replaced: %w", gitEntryName, err)
+	}
 	return nil
 }
 
@@ -223,6 +382,17 @@ func (identity repositoryIdentity) rewalk() (rootErr error) {
 
 func (identity *repositoryIdentity) close() error {
 	var failures []error
+	if identity.linked != nil {
+		if err := identity.linked.close(); err != nil {
+			failures = append(failures, err)
+		}
+	}
+	if identity.pointer != nil && !identity.pointer.closed {
+		identity.pointer.closed = true
+		if err := identity.closeFD(identity.pointer.fd); err != nil {
+			failures = append(failures, fmt.Errorf("close held repository %s pointer: %w", gitEntryName, err))
+		}
+	}
 	for index := len(identity.nodes) - 1; index >= 0; index-- {
 		if identity.nodes[index].closed {
 			continue
@@ -249,9 +419,13 @@ func identityOfStat(stat unix.Stat_t) unixIdentity {
 
 func validateIdentity(kind filesystemObjectKind, recorded, current unixIdentity) error {
 	expectedType := uint32(unix.S_IFDIR)
-	if kind == symlinkObject {
+	switch kind {
+	case directoryObject:
+	case symlinkObject:
 		expectedType = uint32(unix.S_IFLNK)
-	} else if kind != directoryObject {
+	case regularFileObject:
+		expectedType = uint32(unix.S_IFREG)
+	default:
 		return fmt.Errorf("unsupported filesystem object kind %q", kind)
 	}
 	checks := []struct {
@@ -273,9 +447,9 @@ func validateIdentity(kind filesystemObjectKind, recorded, current unixIdentity)
 	if fileTypeMode(current.mode) != expectedType {
 		return fmt.Errorf("%s has unsafe type %d", kind, fileTypeMode(current.mode))
 	}
-	if kind == symlinkObject {
+	if kind == symlinkObject || kind == regularFileObject {
 		if recorded.nlink != 1 || current.nlink != 1 {
-			return fmt.Errorf("symlink link count must remain exactly one: recorded=%d current=%d", recorded.nlink, current.nlink)
+			return fmt.Errorf("%s link count must remain exactly one: recorded=%d current=%d", kind, recorded.nlink, current.nlink)
 		}
 	} else if recorded.nlink == 0 || current.nlink == 0 {
 		return fmt.Errorf("directory is not live: recorded_nlink=%d current_nlink=%d", recorded.nlink, current.nlink)

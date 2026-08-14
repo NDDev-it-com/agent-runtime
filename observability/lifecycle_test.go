@@ -187,7 +187,7 @@ func TestEveryLifecycleKindHasValidSubjectOutcomeAndPayload(t *testing.T) {
 	memory, _ := NewMemorySink("memory", 100)
 	emitter := testEmitter(t, memory)
 	ctx := lifecycleContext()
-	drafts := []Draft{TaskValidatedDraft("task-1", ctx), TaskStartedDraft("task-2", ctx), TaskResultDraft(agentruntime.Result{AgentID: "task-3", Accepted: true}, nil, ctx), TaskResultDraft(agentruntime.Result{AgentID: "task-4", Accepted: false}, &ErrorEvidence{Code: ErrorExecution, Class: ErrorClassExecution}, ctx), TaskBlockedDraft("task-5", BlockEvidenceMissing, []string{"test"}, ctx)}
+	drafts := []Draft{TaskValidatedDraft("task-1", ctx), TaskStartedDraft("task-2", ctx), TaskResultDraft(agentruntime.Result{AgentID: "task-3", Accepted: true}, nil, ctx), TaskResultDraft(agentruntime.Result{AgentID: "task-4", Accepted: false}, &ErrorEvidence{Code: ErrorExecution, Class: ErrorClassExecution}, ctx), TaskBlockedDraft("task-5", BlockEvidenceMissing, []string{"test"}, ctx), TaskResultDraft(agentruntime.Result{AgentID: "task-6", Cancelled: true}, &ErrorEvidence{Code: ErrorCancelled, Class: ErrorClassCancellation}, ctx)}
 	drafts = append(drafts, completeGoalLifecycleDrafts(t, ctx)...)
 	for _, stage := range []HandoffStage{HandoffStageDispatched, HandoffStageAccepted, HandoffStageCompleted, HandoffStageFailed, HandoffStageBlocked} {
 		var errorEvidence *ErrorEvidence
@@ -284,5 +284,60 @@ func assertKinds(t *testing.T, events []Draft, want ...EventKind) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("kinds=%v want=%v", got, want)
+	}
+}
+
+// TestCancelledTaskRequiresCancellationEvidence keeps the cancelled outcome
+// tied to the evidence that justifies it: a caller cannot claim a Task was
+// stopped without the unaccepted result and the cancellation error that make it
+// true, and cannot claim it while also reporting the Task as blocked.
+func TestCancelledTaskRequiresCancellationEvidence(t *testing.T) {
+	t.Parallel()
+	memory, _ := NewMemorySink("memory", 100)
+	emitter := testEmitter(t, memory)
+	ctx := lifecycleContext()
+	cancellation := &ErrorEvidence{Code: ErrorCancelled, Class: ErrorClassCancellation}
+
+	valid := TaskResultDraft(agentruntime.Result{AgentID: "task-cancelled", Cancelled: true}, cancellation, ctx)
+	if valid.Kind != TaskCancelled || valid.Outcome != OutcomeCancelled {
+		t.Fatalf("cancelled result drafted kind=%s outcome=%s", valid.Kind, valid.Outcome)
+	}
+	if _, _, err := emitter.Emit(context.Background(), valid); err != nil {
+		t.Fatalf("well-evidenced cancellation rejected: %v", err)
+	}
+
+	accepted := true
+	for name, mutate := range map[string]func(*Draft){
+		"no error evidence": func(d *Draft) { d.Payload.Error = nil },
+		"wrong error class": func(d *Draft) { d.Payload.Error = &ErrorEvidence{Code: ErrorExecution, Class: ErrorClassExecution} },
+		"accepted result":   func(d *Draft) { d.Payload.Accepted = &accepted },
+		"also blocked": func(d *Draft) {
+			d.Payload.Blocking = &BlockingEvidence{Code: BlockEvidenceMissing, RequiredEvidenceTypes: []string{"test"}}
+		},
+		"outcome disagreement": func(d *Draft) { d.Outcome = OutcomeFailed },
+	} {
+		t.Run(name, func(t *testing.T) {
+			draft := TaskResultDraft(agentruntime.Result{AgentID: "task-cancelled", Cancelled: true}, cancellation, ctx)
+			mutate(&draft)
+			if _, _, err := emitter.Emit(context.Background(), draft); err == nil {
+				t.Fatal("emitter accepted a cancelled Task without its evidence")
+			}
+		})
+	}
+}
+
+// TestTimedOutTaskIsNotReportedAsCancelled keeps the two terminal states apart:
+// exceeding the Task's own timeout is the Task failing its contract, not the
+// caller stopping it.
+func TestTimedOutTaskIsNotReportedAsCancelled(t *testing.T) {
+	t.Parallel()
+	ctx := lifecycleContext()
+	draft := TaskResultDraft(
+		agentruntime.Result{AgentID: "task-timeout", TimedOut: true},
+		&ErrorEvidence{Code: ErrorTimeout, Class: ErrorClassTimeout},
+		ctx,
+	)
+	if draft.Kind != TaskFailed || draft.Outcome != OutcomeFailed {
+		t.Fatalf("timed-out result drafted kind=%s outcome=%s, want a failed Task", draft.Kind, draft.Outcome)
 	}
 }

@@ -41,6 +41,7 @@ const (
 	TaskCompleted            EventKind = "task.completed"
 	TaskFailed               EventKind = "task.failed"
 	TaskBlocked              EventKind = "task.blocked"
+	TaskCancelled            EventKind = "task.cancelled"
 	GoalCreated              EventKind = "goal.created"
 	GoalChecklistAdded       EventKind = "goal.checklist_added"
 	GoalChecklistCompleted   EventKind = "goal.checklist_completed"
@@ -55,7 +56,7 @@ const (
 	HandoffBlocked           EventKind = "handoff.blocked"
 )
 
-var eventKinds = map[EventKind]bool{TaskValidated: true, TaskStarted: true, TaskCompleted: true, TaskFailed: true, TaskBlocked: true, GoalCreated: true, GoalChecklistAdded: true, GoalChecklistCompleted: true, GoalReceiptEvidenceAdded: true, GoalPhaseTransitioned: true, GoalCompleted: true, GoalBlocked: true, HandoffDispatched: true, HandoffAccepted: true, HandoffCompleted: true, HandoffFailed: true, HandoffBlocked: true}
+var eventKinds = map[EventKind]bool{TaskValidated: true, TaskStarted: true, TaskCompleted: true, TaskFailed: true, TaskBlocked: true, TaskCancelled: true, GoalCreated: true, GoalChecklistAdded: true, GoalChecklistCompleted: true, GoalReceiptEvidenceAdded: true, GoalPhaseTransitioned: true, GoalCompleted: true, GoalBlocked: true, HandoffDispatched: true, HandoffAccepted: true, HandoffCompleted: true, HandoffFailed: true, HandoffBlocked: true}
 
 type SubjectKind string
 

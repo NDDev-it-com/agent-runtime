@@ -3,7 +3,9 @@
 package observability
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,8 +62,15 @@ func TestTerminalTaskEventSurvivesCallerCancellation(t *testing.T) {
 		t.Fatalf("events=%d, want validated, started and a terminal event", len(run.Events))
 	}
 	terminal := run.Events[len(run.Events)-1]
-	if terminal.Kind() != TaskFailed {
-		t.Fatalf("terminal kind=%s", terminal.Kind())
+	if terminal.Kind() != TaskCancelled {
+		t.Fatalf("terminal kind=%s, want %s", terminal.Kind(), TaskCancelled)
+	}
+	encoded, err := json.Marshal(terminal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(encoded, []byte(`"outcome":"`+OutcomeCancelled+`"`)) {
+		t.Fatalf("terminal envelope does not publish the cancelled outcome: %s", encoded)
 	}
 	report := run.Delivery[len(run.Delivery)-1]
 	if !report.Succeeded() {

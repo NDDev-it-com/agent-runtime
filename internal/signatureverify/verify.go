@@ -74,8 +74,11 @@ var canonicalTrustPolicy = trustPolicy{
 	principal: CanonicalPrincipal, keyType: "ED25519", fingerprint: CanonicalFingerprint,
 }
 
+// runner executes git, and only git, at gitExecutable. It carries no
+// executable parameter so no call site can introduce a different binary into
+// the trust path.
 type runner interface {
-	run(context.Context, string, []string, string, []string) ([]byte, []byte, error)
+	run(context.Context, []string, string, []string) ([]byte, []byte, error)
 }
 
 type verifyOptions struct {
@@ -86,8 +89,8 @@ type verifyOptions struct {
 
 type execRunner struct{}
 
-func (execRunner) run(ctx context.Context, path string, args []string, dir string, env []string) ([]byte, []byte, error) {
-	command := exec.CommandContext(ctx, path, args...)
+func (execRunner) run(ctx context.Context, args []string, dir string, env []string) ([]byte, []byte, error) {
+	command := exec.CommandContext(ctx, gitExecutable, args...)
 	command.Dir = dir
 	command.Env = env
 	var stdout, stderr bytes.Buffer
@@ -190,7 +193,7 @@ func verifyWithOptions(ctx context.Context, request Request, policy trustPolicy,
 		"-c", "gpg.minTrustLevel=fully",
 		"verify-" + string(request.Kind), "--raw", request.ObjectSHA,
 	}
-	stdout, stderr, runErr := commands.run(ctx, "git", verifyArgs, root, isolatedGitEnvironment())
+	stdout, stderr, runErr := commands.run(ctx, verifyArgs, root, isolatedGitEnvironment())
 	stdoutErr := writeEvidence(request.Stdout, stdout, "signature verifier stdout")
 	stderrErr := writeEvidence(request.Stderr, stderr, "signature verifier stderr")
 	if err := errors.Join(runErr, stdoutErr, stderrErr); err != nil {
@@ -334,7 +337,7 @@ func parseVerificationOutput(stderr []byte) (string, string, string, error) {
 }
 
 func gitOutput(ctx context.Context, commands runner, root string, args []string, stdout, stderr io.Writer) ([]byte, error) {
-	out, diagnostic, err := commands.run(ctx, "git", args, root, isolatedGitEnvironment())
+	out, diagnostic, err := commands.run(ctx, args, root, isolatedGitEnvironment())
 	diagnosticErr := writeEvidence(stderr, diagnostic, "Git diagnostic output")
 	if err != nil {
 		stdoutErr := writeEvidence(stdout, out, "Git stdout")
