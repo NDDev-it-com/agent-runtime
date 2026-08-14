@@ -56,7 +56,15 @@ jobs:
           test "$remote_tag_object" = "$(git rev-parse "$RELEASE_TAG")"
           tag_verification="$(gh api "repos/${GITHUB_REPOSITORY}/git/tags/${remote_tag_object}" --jq '.verification.verified')"
           test "$tag_verification" = true
-          test "$(gh api "repos/${GITHUB_REPOSITORY}/immutable-releases" --jq '.enabled')" = true
+          # The immutable-releases setting is deliberately not read here. That
+          # endpoint requires admin read access, which this job does not have and
+          # must not be given: it publishes, so its token is held to contents,
+          # id-token and attestation scopes. The guarantee comes from two places
+          # that do not depend on this token — the organisation ruleset
+          # "immutable release tags", which forbids tag deletion, update and
+          # non-fast-forward independently of any workflow, and step 8 of the
+          # pre-tag gate in docs/releasing.md, which a maintainer runs with an
+          # admin token before the tag exists.
           if gh release view "$RELEASE_TAG" >/dev/null 2>&1; then
             echo "release already exists; immutable releases are append-only" >&2
             exit 1

@@ -64,6 +64,14 @@ func VerifyRelease(c Contract, workflow []byte) error {
 	if normalizeMinor(version) != normalizeMinor(c.CompatibilityGo) {
 		return fmt.Errorf("release job Go %s differs from compatibility Go %s", version, c.CompatibilityGo)
 	}
+	// The publishing job's token is held to contents, id-token and attestation
+	// scopes. Reading the immutable-releases setting needs admin read access, so
+	// calling it here fails the job with HTTP 403 after every other check has
+	// passed. That guarantee belongs to the organisation tag ruleset and to the
+	// pre-tag gate, neither of which depends on this token.
+	if strings.Contains(string(workflow), "/immutable-releases") {
+		return errors.New("release workflow must not read the immutable-releases setting; its token has no admin access")
+	}
 	return nil
 }
 
