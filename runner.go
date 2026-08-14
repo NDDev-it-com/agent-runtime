@@ -21,9 +21,15 @@ type Result struct {
 	DurationMS int64  `json:"duration_ms"`
 	Output     string `json:"output"`
 	Truncated  bool   `json:"truncated"`
-	TimedOut   bool   `json:"timed_out"`
-	Cancelled  bool   `json:"cancelled"`
-	Accepted   bool   `json:"accepted"`
+	// ExecutablePath is the file this run actually executed. A bare command name
+	// is resolved through the caller's PATH — the manifest does not decide it —
+	// so the choice is recorded here rather than left invisible. Empty when the
+	// name could not be resolved, in which case the run fails with the same error
+	// it always did.
+	ExecutablePath string `json:"executable_path"`
+	TimedOut       bool   `json:"timed_out"`
+	Cancelled      bool   `json:"cancelled"`
+	Accepted       bool   `json:"accepted"`
 }
 
 // errTaskTimeout attributes a termination to the manifest timeout. A caller
@@ -59,9 +65,11 @@ func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) 
 		lookup = os.LookupEnv
 	}
 
+	executable, resolved := resolveExecutable(manifest.Command[0])
+
 	runCtx, cancel := context.WithTimeoutCause(ctx, manifest.Timeout.Duration, errTaskTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(runCtx, manifest.Command[0], manifest.Command[1:]...)
+	cmd := exec.CommandContext(runCtx, executable, manifest.Command[1:]...)
 	cmd.WaitDelay = 2 * time.Second
 	cmd.Dir = workdir
 	cmd.Env = selectedEnvironment(manifest.Env, lookup)
@@ -72,7 +80,7 @@ func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) 
 	err = cmd.Run()
 	cause := context.Cause(runCtx)
 	terminated := err != nil && cause != nil
-	result := Result{AgentID: manifest.ID, DurationMS: time.Since(started).Milliseconds(), Output: output.String(), Truncated: output.truncated}
+	result := Result{AgentID: manifest.ID, ExecutablePath: resolved, DurationMS: time.Since(started).Milliseconds(), Output: output.String(), Truncated: output.truncated}
 	result.TimedOut = terminated && errors.Is(cause, errTaskTimeout)
 	result.Cancelled = terminated && !result.TimedOut
 	if err == nil {
@@ -118,6 +126,27 @@ func accepted(criteria TaskAcceptance, result Result) bool {
 		}
 	}
 	return true
+}
+
+// resolveExecutable reports the file a bare command name resolves to, and the
+// argument exec should be given. Resolution happens once, here, so the run can
+// record what it chose; exec.Command would otherwise resolve the same name
+// invisibly and discard the answer.
+//
+// A name containing a separator is a path already and is passed through
+// untouched. A bare name that resolves is replaced by its absolute path, which
+// is what exec would have executed anyway. A bare name that does not resolve is
+// passed through so the failure is produced by exec, with the same message as
+// before.
+func resolveExecutable(name string) (argument, resolved string) {
+	if strings.ContainsRune(name, os.PathSeparator) {
+		return name, name
+	}
+	path, err := exec.LookPath(name)
+	if err != nil {
+		return name, ""
+	}
+	return path, path
 }
 
 func selectedEnvironment(names []string, lookup func(string) (string, bool)) []string {

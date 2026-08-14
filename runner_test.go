@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -77,4 +79,63 @@ func TestHelperProcess(t *testing.T) {
 		time.Sleep(time.Second)
 	}
 	os.Exit(0)
+}
+
+// TestResultRecordsTheExecutableItRan pins the evidence a run used to discard.
+// A bare command name is resolved through the caller's PATH, so the manifest
+// does not decide which binary runs (issue #46); recording the resolved path is
+// what makes that choice auditable after the fact.
+func TestResultRecordsTheExecutableItRan(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "instructions.md", "be useful")
+	w, _ := OpenWorkspace(root)
+
+	t.Run("path is passed through", func(t *testing.T) {
+		m := testManifest(os.Args[0], "echo")
+		m.Env = []string{"GO_WANT_HELPER_PROCESS"}
+		result, err := (Runner{Workspace: w, LookupEnv: func(string) (string, bool) { return "1", true }}).Run(context.Background(), m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ExecutablePath != os.Args[0] {
+			t.Fatalf("executable path = %q, want %q", result.ExecutablePath, os.Args[0])
+		}
+	})
+
+	t.Run("bare name records its absolute resolution", func(t *testing.T) {
+		want, lookErr := exec.LookPath("true")
+		if lookErr != nil {
+			t.Skip("no true(1) on this host")
+		}
+		m := testManifest(os.Args[0], "echo")
+		m.Command = []string{"true"}
+		result, err := (Runner{Workspace: w}).Run(context.Background(), m)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if result.ExecutablePath != want {
+			t.Fatalf("executable path = %q, want %q", result.ExecutablePath, want)
+		}
+		if !filepath.IsAbs(result.ExecutablePath) {
+			t.Fatalf("executable path %q is not absolute", result.ExecutablePath)
+		}
+	})
+
+	t.Run("unresolvable name keeps the previous failure", func(t *testing.T) {
+		m := testManifest(os.Args[0], "echo")
+		m.Command = []string{"definitely-not-a-real-binary-xyz"}
+		result, err := (Runner{Workspace: w}).Run(context.Background(), m)
+		if err == nil {
+			t.Fatal("unresolvable command did not fail")
+		}
+		if result.ExecutablePath != "" {
+			t.Fatalf("executable path = %q, want empty for an unresolved name", result.ExecutablePath)
+		}
+		if result.ExitCode != -1 || result.AgentID != m.ID {
+			t.Fatalf("failure shape changed: %#v", result)
+		}
+		if !strings.Contains(err.Error(), "executable file not found") {
+			t.Fatalf("error changed: %v", err)
+		}
+	})
 }
