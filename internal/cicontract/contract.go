@@ -8,10 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"regexp"
 	"strconv"
 	"strings"
 
+	"github.com/NDDev-it-com/agent-runtime/internal/actions"
 	"github.com/NDDev-it-com/agent-runtime/internal/releasecontract"
 )
 
@@ -57,7 +57,11 @@ func Load(path string) (Contract, error) {
 // release lane below the module's own go directive cannot run at all — and
 // nothing noticed, because this contract used to read only ci.yml.
 func VerifyRelease(c Contract, workflow []byte) error {
-	version, err := jobGoVersion(string(workflow), "release")
+	w, err := actions.Parse(workflow)
+	if err != nil {
+		return err
+	}
+	version, err := jobGoVersion(w, "release")
 	if err != nil {
 		return err
 	}
@@ -68,20 +72,25 @@ func VerifyRelease(c Contract, workflow []byte) error {
 	// scopes. Reading the immutable-releases setting needs admin read access, so
 	// calling it here fails the job with HTTP 403 after every other check has
 	// passed. That guarantee belongs to the organisation tag ruleset and to the
-	// pre-tag gate, neither of which depends on this token.
-	if strings.Contains(string(workflow), "/immutable-releases") {
+	// pre-tag gate, neither of which depends on this token. The comment in the
+	// workflow explaining that is prose and is deliberately not evidence here:
+	// only an executed command counts.
+	if w.CountRunOccurrences("/immutable-releases") != 0 {
 		return errors.New("release workflow must not read the immutable-releases setting; its token has no admin access")
 	}
 	return nil
 }
 
 func VerifyWorkflow(c Contract, workflow []byte) error {
-	text := string(workflow)
-	testVersion, err := jobGoVersion(text, "test")
+	w, err := actions.Parse(workflow)
 	if err != nil {
 		return err
 	}
-	scannerVersion, err := jobGoVersion(text, "govulncheck")
+	testVersion, err := jobGoVersion(w, "test")
+	if err != nil {
+		return err
+	}
+	scannerVersion, err := jobGoVersion(w, "govulncheck")
 	if err != nil {
 		return err
 	}
@@ -97,34 +106,45 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	if compareGo(testVersion, c.Staticcheck.MinimumGo) < 0 {
 		return fmt.Errorf("test job Go %s is below staticcheck minimum %s", testVersion, c.Staticcheck.MinimumGo)
 	}
-	pin := c.Govulncheck.Module + "@" + c.Govulncheck.Version
-	if strings.Count(text, pin) != 3 {
-		return fmt.Errorf("workflow must reference pinned %s exactly three times (summary, version evidence, and scan)", pin)
-	}
-	testBody, err := jobBody(text, "test")
+	// Each pin is counted per lane, over executed run scripts only. Counting
+	// over the whole file let an invocation move to a comment or to another job
+	// while the total stayed right.
+	scanner, err := w.Job("govulncheck")
 	if err != nil {
 		return err
 	}
-	lintPin := c.Staticcheck.Module + "@" + c.Staticcheck.Version
-	if strings.Count(testBody, lintPin) != 2 {
-		return fmt.Errorf("test job must reference pinned %s exactly twice (version evidence and analysis)", lintPin)
-	}
-	if strings.Count(text, lintPin) != strings.Count(testBody, lintPin) {
-		return fmt.Errorf("pinned %s must be invoked only from the test job", lintPin)
-	}
-	if !strings.Contains(text, "GOTOOLCHAIN: local") {
-		return errors.New("workflow must set GOTOOLCHAIN: local")
-	}
-	if strings.Count(text, "go run ./cmd/check-fuzz") != 1 {
-		return errors.New("workflow must invoke the canonical fuzz verifier exactly once")
-	}
-	if err := verifyReleaseReproductionCommand(text); err != nil {
+	test, err := w.Job("test")
+	if err != nil {
 		return err
 	}
-	return nil
+	pin := c.Govulncheck.Module + "@" + c.Govulncheck.Version
+	if scanner.CountRunOccurrences(pin) != 3 {
+		return fmt.Errorf("govulncheck job must run pinned %s exactly three times (summary, version evidence, and scan)", pin)
+	}
+	if w.CountRunOccurrences(pin) != 3 {
+		return fmt.Errorf("pinned %s must be invoked only from the govulncheck job", pin)
+	}
+	lintPin := c.Staticcheck.Module + "@" + c.Staticcheck.Version
+	if test.CountRunOccurrences(lintPin) != 2 {
+		return fmt.Errorf("test job must run pinned %s exactly twice (version evidence and analysis)", lintPin)
+	}
+	if w.CountRunOccurrences(lintPin) != 2 {
+		return fmt.Errorf("pinned %s must be invoked only from the test job", lintPin)
+	}
+	if w.Env["GOTOOLCHAIN"] != "local" {
+		return errors.New("workflow must set GOTOOLCHAIN: local")
+	}
+	if w.CountRunOccurrences("go run ./cmd/check-fuzz") != 1 {
+		return errors.New("workflow must invoke the canonical fuzz verifier exactly once")
+	}
+	return verifyReleaseReproductionCommand(test)
 }
 
-func verifyReleaseReproductionCommand(workflow string) error {
+// verifyReleaseReproductionCommand requires the whole reproduction sequence to
+// live in one executed step. Spreading it over several steps, or leaving part
+// of it in a comment, would leave the two builds uncompared while every token
+// was still present somewhere in the file.
+func verifyReleaseReproductionCommand(job *actions.Job) error {
 	required := []string{
 		`parent="$(mktemp -d)"`,
 		`first="$parent/first"`,
@@ -137,44 +157,47 @@ func verifyReleaseReproductionCommand(workflow string) error {
 		`--out "$second" --verify-result "$second_result"`,
 		`diff -rq "$first" "$second"`,
 	}
+	var reproduction string
+	for _, script := range job.RunScripts() {
+		if strings.Contains(script, `diff -rq "$first" "$second"`) {
+			if reproduction != "" {
+				return errors.New("release reproduction command must be one step")
+			}
+			reproduction = script
+		}
+	}
+	if reproduction == "" {
+		return errors.New("test job must run the release reproduction command")
+	}
 	for _, token := range required {
-		token = strings.ReplaceAll(token, "\\\"", "\"")
-		if strings.Count(workflow, token) != 1 {
+		if strings.Count(reproduction, token) != 1 {
 			return fmt.Errorf("release reproduction command requires exactly one %q", token)
 		}
 	}
 	for _, forbidden := range []string{`release/contract.json`, `${TMPDIR}/`, `${RUNNER_TEMP}/`, `mkdir "$first"`, `mkdir "$second"`, `mkdir -p "$first"`, `mkdir -p "$second"`} {
-		forbidden = strings.ReplaceAll(forbidden, "\\\"", "\"")
-		if strings.Contains(workflow, forbidden) {
+		if strings.Contains(reproduction, forbidden) {
 			return errors.New("release reproduction command must not pre-create final output leaves")
 		}
 	}
 	return nil
 }
-func jobBody(workflow, job string) (string, error) {
-	marker := "  " + job + ":\n"
-	start := strings.Index(workflow, marker)
-	if start < 0 {
-		return "", fmt.Errorf("workflow job %s not found", job)
-	}
-	body := workflow[start+len(marker):]
-	jobBoundary := regexp.MustCompile(`(?m)^  [a-zA-Z0-9_-]+:\s*$`)
-	if next := jobBoundary.FindStringIndex(body); next != nil {
-		body = body[:next[0]]
-	}
-	return body, nil
-}
 
-func jobGoVersion(workflow, job string) (string, error) {
-	body, err := jobBody(workflow, job)
+// jobGoVersion reads the toolchain a job actually installs, from the setup-go
+// step's own input rather than from any `go-version:` text in the job body.
+func jobGoVersion(w *actions.Workflow, id string) (string, error) {
+	job, err := w.Job(id)
 	if err != nil {
 		return "", err
 	}
-	version := regexp.MustCompile(`go-version:\s*'([^']+)'`).FindStringSubmatch(body)
-	if version == nil {
-		return "", fmt.Errorf("workflow job %s has no literal go-version", job)
+	step, ok := job.StepUsing("actions/setup-go@")
+	if !ok {
+		return "", fmt.Errorf("workflow job %s does not install a Go toolchain", id)
 	}
-	return strings.TrimSuffix(version[1], ".x"), nil
+	version := step.With["go-version"]
+	if version == "" {
+		return "", fmt.Errorf("workflow job %s has no literal go-version", id)
+	}
+	return strings.TrimSuffix(version, ".x"), nil
 }
 func normalizeMinor(v string) string {
 	parts := strings.Split(v, ".")

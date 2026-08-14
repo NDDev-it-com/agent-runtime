@@ -10,15 +10,18 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
 	"golang.org/x/mod/modfile"
 	"golang.org/x/mod/module"
 
+	"github.com/NDDev-it-com/agent-runtime/internal/actions"
 	"github.com/NDDev-it-com/agent-runtime/internal/provenance"
 	"github.com/NDDev-it-com/agent-runtime/internal/signatureverify"
 )
@@ -30,11 +33,22 @@ const (
 	// It is the one place the baseline is written in Go; release/v1alpha1.json,
 	// the release schema, security-tools.json and go.mod must agree with it.
 	CanonicalGoCompatibility = "1.25"
+	// ReleaseJob is the only job in the release workflow permitted to hold
+	// write scopes, and the job every publication assertion is made against.
+	ReleaseJob = "release"
 )
 
 var (
 	versionPattern = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 	actionPattern  = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$`)
+	// permittedDependencyLicenses is a closed allowlist rather than a single
+	// constant, because the closure is no longer uniformly BSD. It stays closed
+	// so a dependency arriving under an unreviewed licence fails the contract
+	// instead of being recorded as whatever its go.mod happened to say.
+	permittedDependencyLicenses = map[string]bool{
+		"BSD-3-Clause": true,
+		"MIT":          true,
+	}
 )
 
 type Contract struct {
@@ -118,7 +132,7 @@ func (c Contract) Validate() error {
 	}
 	seenDependencies := make(map[string]struct{}, len(c.Dependencies))
 	for _, dependency := range c.Dependencies {
-		if module.CheckPath(dependency.ModulePath) != nil || module.CanonicalVersion(dependency.Version) != dependency.Version || dependency.License != "BSD-3-Clause" {
+		if module.CheckPath(dependency.ModulePath) != nil || module.CanonicalVersion(dependency.Version) != dependency.Version || !permittedDependencyLicenses[dependency.License] {
 			return errors.New("release dependency identity, version, or license is invalid")
 		}
 		if _, duplicate := seenDependencies[dependency.ModulePath]; duplicate {
@@ -157,9 +171,9 @@ func (c Contract) Validate() error {
 	if c.Limits.MaxFiles < 1 || c.Limits.MaxFiles > 10000 || c.Limits.MaxFileBytes < 1 || c.Limits.MaxFileBytes > 64<<20 || c.Limits.MaxTotalBytes < c.Limits.MaxFileBytes || c.Limits.MaxTotalBytes > 256<<20 || c.Limits.MaxPathBytes < 64 || c.Limits.MaxPathBytes > 4096 {
 		return errors.New("release bounds are missing or unsafe")
 	}
-	actions := map[string]string{"checkout": c.Actions.Checkout, "setup_go": c.Actions.SetupGo, "attest_provenance": c.Actions.AttestProvenance, "attest_sbom": c.Actions.AttestSBOM}
+	pinnedActions := map[string]string{"checkout": c.Actions.Checkout, "setup_go": c.Actions.SetupGo, "attest_provenance": c.Actions.AttestProvenance, "attest_sbom": c.Actions.AttestSBOM}
 	prefixes := map[string]string{"checkout": "actions/checkout@", "setup_go": "actions/setup-go@", "attest_provenance": "actions/attest-build-provenance@", "attest_sbom": "actions/attest@"}
-	for name, action := range actions {
+	for name, action := range pinnedActions {
 		if !actionPattern.MatchString(action) {
 			return fmt.Errorf("action %s must be pinned to a full commit SHA", name)
 		}
@@ -278,26 +292,113 @@ func (c Contract) verifyGoSum(data []byte) error {
 	return nil
 }
 
+// VerifyWorkflow proves the publishing lane is what it claims to be. Every
+// assertion below is made against the parsed Actions model, so a control that
+// has been moved into a comment, a disabled job or a value that never executes
+// is absent as far as this contract is concerned — which is the only reading
+// under which a green check means anything.
 func (c Contract) VerifyWorkflow(data []byte) error {
-	s := string(data)
-	required := []string{
-		"tags: ['v*.*.*']", "if: github.run_attempt == 1", "contents: read", "contents: write", "id-token: write", "attestations: write", "artifact-metadata: write",
-		"go run ./cmd/check-release-contract", "go run ./cmd/check-cold-compile", "go run ./cmd/check-signature --tag", provenance.IntegrationCommand, "--expected-commit", "verification.verified", "refs/heads/main", "gh release create", "--verify-tag", c.Actions.Checkout, c.Actions.SetupGo, c.Actions.AttestProvenance, c.Actions.AttestSBOM,
-		"--expect-version", `release_parent="$(mktemp -d)"`, `release_dist="${release_parent}/release-dist"`, `release_result="${release_parent}/build-result.json"`, `--out "$release_dist"`, `--result "$release_result"`, `--verify-result "$release_result"`, `RELEASE_DIST=$release_dist`, `${{ env.RELEASE_DIST }}`,
+	w, err := actions.Parse(data)
+	if err != nil {
+		return err
 	}
-	for _, token := range required {
-		token = strings.ReplaceAll(token, "\\\"", "\"")
-		if !strings.Contains(s, token) {
-			return fmt.Errorf("release workflow missing required token %q", token)
+	if err := c.verifyReleaseTrigger(w); err != nil {
+		return err
+	}
+	if err := c.verifyReleasePermissions(w); err != nil {
+		return err
+	}
+	job, err := w.Job(ReleaseJob)
+	if err != nil {
+		return err
+	}
+	if job.If != "github.run_attempt == 1" {
+		return errors.New("release job must run only on the first attempt")
+	}
+	// Actions are pinned by digest, and the pin must be on a step that runs.
+	for name, pin := range map[string]string{"checkout": c.Actions.Checkout, "setup_go": c.Actions.SetupGo, "attest_provenance": c.Actions.AttestProvenance, "attest_sbom": c.Actions.AttestSBOM} {
+		if !slices.Contains(job.UsesActions(), pin) {
+			return fmt.Errorf("release job must use pinned %s action %q", name, pin)
 		}
 	}
-	for _, forbidden := range []string{"pull_request:", "branches: [main]", "workflow_dispatch:", "--clobber", "permissions: write-all", "secrets:", "environment:", "git config ", "git verify-tag", "${RUNNER_TEMP}/", "${TMPDIR}/"} {
-		if strings.Contains(s, forbidden) {
+	// The checkout must not leave a usable credential behind for later steps.
+	checkout, ok := job.StepUsing(c.Actions.Checkout)
+	if !ok || checkout.With["persist-credentials"] != "false" {
+		return errors.New("release checkout must set persist-credentials: false")
+	}
+	// Commands the lane is named after. Each must be in an executed script.
+	for _, command := range []string{
+		"go run ./cmd/check-release-contract", "go run ./cmd/check-cold-compile",
+		"go run ./cmd/check-signature --tag", provenance.IntegrationCommand,
+		"--expected-commit", "verification.verified", "refs/heads/main",
+		"gh release create", "--verify-tag", "--expect-version",
+		`release_parent="$(mktemp -d)"`, `release_dist="${release_parent}/release-dist"`,
+		`release_result="${release_parent}/build-result.json"`, `--out "$release_dist"`,
+		`--result "$release_result"`, `--verify-result "$release_result"`,
+		`RELEASE_DIST=$release_dist`,
+	} {
+		if job.CountRunOccurrences(command) == 0 {
+			return fmt.Errorf("release job must run %q", command)
+		}
+	}
+	// The attestation steps must consume the bundle the build step exported,
+	// which is a step input rather than a command.
+	if !slices.ContainsFunc(w.StepValues(), func(value string) bool {
+		return strings.Contains(value, "${{ env.RELEASE_DIST }}")
+	}) {
+		return errors.New("release attestation must take its subject from ${{ env.RELEASE_DIST }}")
+	}
+	for _, forbidden := range []string{"--clobber", "git config ", "git verify-tag", "${RUNNER_TEMP}/", "${TMPDIR}/"} {
+		if w.CountRunOccurrences(forbidden) != 0 {
 			return fmt.Errorf("release workflow contains forbidden publication surface %q", forbidden)
 		}
 	}
-	if strings.Count(s, "contents: write") != 1 || strings.Count(s, "id-token: write") != 1 || strings.Count(s, "attestations: write") != 1 || strings.Count(s, "artifact-metadata: write") != 1 {
-		return errors.New("release write permissions must occur exactly once at job scope")
+	return nil
+}
+
+// verifyReleaseTrigger keeps publication reachable only from a version tag.
+func (c Contract) verifyReleaseTrigger(w *actions.Workflow) error {
+	for _, forbidden := range []string{"pull_request", "workflow_dispatch", "workflow_call", "schedule", "repository_dispatch"} {
+		if w.Triggers[forbidden].Present {
+			return fmt.Errorf("release workflow must not be reachable from %q", forbidden)
+		}
+	}
+	push := w.Triggers["push"]
+	if !push.Present {
+		return errors.New("release workflow must trigger on a pushed tag")
+	}
+	if len(push.Branches) != 0 {
+		return errors.New("release workflow must not trigger on a branch push")
+	}
+	if !slices.Equal(push.Tags, []string{"v*.*.*"}) {
+		return fmt.Errorf("release workflow tag filter must be exactly [v*.*.*], got %v", push.Tags)
+	}
+	return nil
+}
+
+// verifyReleasePermissions holds write scopes to the publishing job. A scope
+// granted at workflow level would apply to every job that is ever added.
+func (c Contract) verifyReleasePermissions(w *actions.Workflow) error {
+	if w.Permissions["contents"] != "read" || len(w.Permissions) != 1 {
+		return errors.New("release workflow scope must be exactly contents: read")
+	}
+	wanted := map[string]string{"contents": "write", "id-token": "write", "attestations": "write", "artifact-metadata": "write"}
+	for _, job := range w.EnabledJobs() {
+		if job.ID != ReleaseJob {
+			if job.PermissionsSet {
+				return fmt.Errorf("only the %s job may hold write permissions", ReleaseJob)
+			}
+			continue
+		}
+		if job.PermissionsBlanket != "" {
+			return fmt.Errorf("release job must enumerate its permissions, not %q", job.PermissionsBlanket)
+		}
+		if !maps.Equal(job.Permissions, wanted) {
+			return fmt.Errorf("release job permissions must be exactly %v, got %v", wanted, job.Permissions)
+		}
+		if job.Environment != "" || job.SecretsSet || job.UsesWorkflow != "" {
+			return errors.New("release job must not use an environment, secrets or a called workflow")
+		}
 	}
 	return nil
 }
