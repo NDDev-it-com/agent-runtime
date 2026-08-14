@@ -5,10 +5,16 @@ package observability
 import (
 	"context"
 	"errors"
+	"time"
 
 	agentruntime "github.com/NDDev-it-com/agent-runtime"
 	goalpkg "github.com/NDDev-it-com/agent-runtime/goal"
 )
+
+// terminalDeliveryTimeout bounds delivery of a terminal Task observation on a
+// context detached from the caller's, so cancelling the work cannot also cancel
+// the record of it.
+const terminalDeliveryTimeout = 5 * time.Second
 
 type TaskRunner struct {
 	Runner  agentruntime.Runner
@@ -43,14 +49,17 @@ func (r TaskRunner) Run(ctx context.Context, manifest agentruntime.TaskManifest)
 	var evidence *ErrorEvidence
 	if executionErr != nil {
 		code, class := ErrorExecution, ErrorClassExecution
-		if result.TimedOut {
+		switch {
+		case result.TimedOut:
 			code, class = ErrorTimeout, ErrorClassTimeout
-		} else if errors.Is(executionErr, context.Canceled) {
+		case result.Cancelled:
 			code, class = ErrorCancelled, ErrorClassCancellation
 		}
 		evidence = &ErrorEvidence{Code: code, Class: class}
 	}
-	r.emit(ctx, TaskResultDraft(result, evidence, r.Context), &run)
+	terminal, stopTerminal := context.WithTimeout(context.WithoutCancel(ctx), terminalDeliveryTimeout)
+	defer stopTerminal()
+	r.emit(terminal, TaskResultDraft(result, evidence, r.Context), &run)
 	return run
 }
 func (r TaskRunner) emit(ctx context.Context, draft Draft, run *TaskRun) {

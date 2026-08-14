@@ -62,7 +62,7 @@ func TestSBOMRejectsDependencyAndRelationshipDrift(t *testing.T) {
 	files := []gitFile{{Mode: "100644", Path: "go.mod", Data: []byte("module " + c.ModulePath + "\n")}}
 	stamp := time.Unix(1, 0).UTC()
 	manifest := newManifest(c, strings.Repeat("a", 40), stamp, "https://example.invalid/sbom", nil)
-	data, err := sbomBytes(files, c, manifest.SourceCommit, stamp, manifest.SBOMNamespace)
+	data, err := sbomBytes(files, c, stamp, manifest.SBOMNamespace)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,7 +125,7 @@ func TestContractJSONFailsClosed(t *testing.T) {
 		i, input := i, input
 		t.Run(string(rune('A'+i)), func(t *testing.T) {
 			t.Parallel()
-			p := filepath.Join(t.TempDir(), "contract.json")
+			p := filepath.Join(privateTempDir(t), "contract.json")
 			mustWrite(t, p, input)
 			if _, err := Load(p); err == nil {
 				t.Fatal("invalid contract JSON accepted")
@@ -235,8 +235,8 @@ func TestBuildIsDeterministicClosedAndCanonical(t *testing.T) {
 	t.Parallel()
 	root := fixtureRepo(t)
 	c := testContract()
-	a := filepath.Join(t.TempDir(), "a")
-	b := filepath.Join(t.TempDir(), "b")
+	a := filepath.Join(privateTempDir(t), "a")
+	b := filepath.Join(privateTempDir(t), "b")
 	if err := Build(root, "HEAD", a, c); err != nil {
 		t.Fatal(err)
 	}
@@ -300,7 +300,7 @@ func TestBuildResultBindsCanonicalArtifactClosure(t *testing.T) {
 	t.Parallel()
 	root := fixtureRepo(t)
 	c := testContract()
-	parent := t.TempDir()
+	parent := privateTempDir(t)
 	out := filepath.Join(parent, "bundle")
 	result, err := BuildWithResult(root, "HEAD", out, c)
 	if err != nil {
@@ -381,7 +381,7 @@ func TestBuildResultRejectsMissingAndNullLicense(t *testing.T) {
 	t.Parallel()
 	root := fixtureRepo(t)
 	c := testContract()
-	out := filepath.Join(t.TempDir(), "bundle")
+	out := filepath.Join(privateTempDir(t), "bundle")
 	result, err := BuildWithResult(root, "HEAD", out, c)
 	if err != nil {
 		t.Fatal(err)
@@ -409,7 +409,7 @@ func TestBuildResultRejectsMissingAndNullLicense(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			path := filepath.Join(t.TempDir(), "result.json")
+			path := filepath.Join(privateTempDir(t), "result.json")
 			if err := os.WriteFile(path, data, 0o600); err != nil {
 				t.Fatal(err)
 			}
@@ -428,7 +428,7 @@ func TestBuildResultRejectsSymlinkAssetAndResidue(t *testing.T) {
 	t.Parallel()
 	root := fixtureRepo(t)
 	c := testContract()
-	out := filepath.Join(t.TempDir(), "bundle")
+	out := filepath.Join(privateTempDir(t), "bundle")
 	result, err := BuildWithResult(root, "HEAD", out, c)
 	if err != nil {
 		t.Fatal(err)
@@ -562,7 +562,7 @@ func TestBuildFailureLeavesNoPartialOutput(t *testing.T) {
 	}
 	gitRun(t, root, "add", "-u")
 	gitRun(t, root, "commit", "-q", "-m", "remove changelog")
-	out := filepath.Join(t.TempDir(), "release")
+	out := filepath.Join(privateTempDir(t), "release")
 	if err := Build(root, "HEAD", out, testContract()); err == nil {
 		t.Fatal("invalid source built")
 	}
@@ -575,7 +575,7 @@ func TestBundleRejectsMissingUnexpectedMalformedAndMismatched(t *testing.T) {
 	t.Parallel()
 	root := fixtureRepo(t)
 	c := testContract()
-	base := filepath.Join(t.TempDir(), "base")
+	base := filepath.Join(privateTempDir(t), "base")
 	if err := Build(root, "HEAD", base, c); err != nil {
 		t.Fatal(err)
 	}
@@ -593,7 +593,7 @@ func TestBundleRejectsMissingUnexpectedMalformedAndMismatched(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			d := filepath.Join(t.TempDir(), "bundle")
+			d := filepath.Join(privateTempDir(t), "bundle")
 			copyDir(t, base, d)
 			tc.mutate(d)
 			if VerifyBundle(d, c) == nil {
@@ -685,7 +685,7 @@ func canonicalGoSum(contract Contract) string {
 
 func fixtureRepo(t *testing.T) string {
 	t.Helper()
-	d := t.TempDir()
+	d := privateTempDir(t)
 	gitRun(t, d, "init", "-q")
 	gitRun(t, d, "config", "user.name", "Test")
 	gitRun(t, d, "config", "user.email", "test@example.com")
@@ -794,4 +794,18 @@ func archiveFixtureBytes(t *testing.T, headers []*tar.Header) []byte {
 		t.Fatal(err)
 	}
 	return out.Bytes()
+}
+
+// privateTempDir returns a temporary directory that satisfies the release output
+// contract on any host. privateTempDir(t) applies the ambient umask, so under a
+// group-writable umask such as 002 every release test would otherwise fail on
+// "caller-owned parent must be effective-UID-owned, owner-rwx, and not
+// group/other writable" — a property of the developer's shell, not of the code.
+func privateTempDir(t *testing.T) string {
+	t.Helper()
+	directory := t.TempDir()
+	if err := os.Chmod(directory, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return directory
 }

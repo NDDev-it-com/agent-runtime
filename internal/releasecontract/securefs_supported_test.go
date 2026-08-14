@@ -24,7 +24,7 @@ var errInjectedRoot = errors.New("injected root failure")
 func TestSecurePublishSuccessNoOverwriteAndNoTemporaryLeak(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	parent := t.TempDir()
+	parent := privateTempDir(t)
 	out := filepath.Join(parent, "release")
 	closed := map[uint64]int{}
 	opts := defaultTransactionOptions()
@@ -57,7 +57,7 @@ func TestSecurePublishSuccessNoOverwriteAndNoTemporaryLeak(t *testing.T) {
 func TestSecurePublishRequiresExistingPrivateParentAndMissingLeaf(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	for _, test := range []struct {
 		name    string
 		path    string
@@ -140,7 +140,7 @@ func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
 	} {
 		test := test
 		t.Run(test.name, func(t *testing.T) {
-			path := filepath.Join(t.TempDir(), "role")
+			path := filepath.Join(privateTempDir(t), "role")
 			if err := os.Mkdir(path, test.mode); err != nil {
 				t.Fatal(err)
 			}
@@ -159,7 +159,7 @@ func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
 		})
 	}
 	t.Run("wrong identity", func(t *testing.T) {
-		owner, identity := openDirectory(t, t.TempDir())
+		owner, identity := openDirectory(t, privateTempDir(t))
 		defer func() { _ = owner.closeOnce(defaultTransactionOptions(), "close wrong identity fixture") }()
 		identity.ino++
 		if err := validateDirectoryRole(owner.handle(), identity, directoryRoleCallerParent); err == nil {
@@ -167,7 +167,7 @@ func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
 		}
 	})
 	t.Run("wrong owner", func(t *testing.T) {
-		owner, identity := openDirectory(t, t.TempDir())
+		owner, identity := openDirectory(t, privateTempDir(t))
 		defer func() { _ = owner.closeOnce(defaultTransactionOptions(), "close wrong owner fixture") }()
 		var st unix.Stat_t
 		if err := unix.Fstat(owner.handle(), &st); err != nil {
@@ -178,7 +178,7 @@ func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
 		}
 	})
 	t.Run("unlinked directory", func(t *testing.T) {
-		root := t.TempDir()
+		root := privateTempDir(t)
 		parent := filepath.Join(root, "deleted")
 		if err := os.Mkdir(parent, 0o700); err != nil {
 			t.Fatal(err)
@@ -196,7 +196,7 @@ func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
 		}
 	})
 	t.Run("stale descriptor", func(t *testing.T) {
-		owner, identity := openDirectory(t, t.TempDir())
+		owner, identity := openDirectory(t, privateTempDir(t))
 		fd := owner.handle()
 		if err := owner.closeOnce(defaultTransactionOptions(), "close stale descriptor fixture"); err != nil {
 			t.Fatal(err)
@@ -206,7 +206,7 @@ func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
 		}
 	})
 	t.Run("non-directory", func(t *testing.T) {
-		path := filepath.Join(t.TempDir(), "file")
+		path := filepath.Join(privateTempDir(t), "file")
 		if err := os.WriteFile(path, []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -228,7 +228,7 @@ func TestDirectoryTrustRolesAreObjectSpecific(t *testing.T) {
 
 func TestAnchoredParentTraversesAndRevalidatesBoundedRelativeSymlink(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := privateTempDir(t)
 	actual := filepath.Join(root, "actual")
 	if err := os.Mkdir(actual, 0o755); err != nil {
 		t.Fatal(err)
@@ -283,7 +283,7 @@ func TestSymlinkTargetPolicyRejectsAbsoluteEscapeCycleShapes(t *testing.T) {
 
 func TestAnchoredParentRejectsSymlinkCycle(t *testing.T) {
 	t.Parallel()
-	root := t.TempDir()
+	root := privateTempDir(t)
 	if err := os.Symlink("b", filepath.Join(root, "a")); err != nil {
 		t.Fatal(err)
 	}
@@ -302,7 +302,7 @@ func TestSecurePublishPartialOwnedSubsetsRollBack(t *testing.T) {
 		failAfter := failAfter
 		t.Run(fmt.Sprintf("after-%d-assets", failAfter), func(t *testing.T) {
 			t.Parallel()
-			parent := t.TempDir()
+			parent := privateTempDir(t)
 			out := filepath.Join(parent, "release")
 			opened := 0
 			opts := defaultTransactionOptions()
@@ -334,7 +334,7 @@ func TestSecurePublishPartialOwnedSubsetsRollBack(t *testing.T) {
 func TestSecurePublishHandlesPartialWrites(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	out := filepath.Join(t.TempDir(), "release")
+	out := filepath.Join(privateTempDir(t), "release")
 	opts := defaultTransactionOptions()
 	opts.write = func(fd int, data []byte) (int, error) {
 		if len(data) > 1 {
@@ -356,7 +356,7 @@ func TestSecurePublishDestinationRaceAndConcurrentPublishers(t *testing.T) {
 	for _, kind := range []string{"directory", "file", "symlink"} {
 		kind := kind
 		t.Run("destination "+kind+" created before publish", func(t *testing.T) {
-			parent := t.TempDir()
+			parent := privateTempDir(t)
 			out := filepath.Join(parent, "release")
 			opts := defaultTransactionOptions()
 			opts.hook = func(point string, tx *bundleTransaction) error {
@@ -385,7 +385,7 @@ func TestSecurePublishDestinationRaceAndConcurrentPublishers(t *testing.T) {
 		})
 	}
 	t.Run("two publishers", func(t *testing.T) {
-		parent := t.TempDir()
+		parent := privateTempDir(t)
 		out := filepath.Join(parent, "release")
 		var wg sync.WaitGroup
 		errs := make(chan error, 2)
@@ -418,7 +418,7 @@ func TestSecurePublishDestinationRaceAndConcurrentPublishers(t *testing.T) {
 func TestSecurePublishPostPublishFailureRollsBackOnlyOwnedFinal(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	parent := t.TempDir()
+	parent := privateTempDir(t)
 	out := filepath.Join(parent, "release")
 	opts := defaultTransactionOptions()
 	opts.hook = func(point string, _ *bundleTransaction) error {
@@ -440,7 +440,7 @@ func TestSecurePublishPostPublishFailureRollsBackOnlyOwnedFinal(t *testing.T) {
 func TestSecurePublishStageRenameWithoutReplacementUsesOwnedIdentity(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	parent := t.TempDir()
+	parent := privateTempDir(t)
 	out := filepath.Join(parent, "release")
 	opts := defaultTransactionOptions()
 	opts.hook = func(point string, tx *bundleTransaction) error {
@@ -462,7 +462,7 @@ func TestSecurePublishStageRenameWithoutReplacementUsesOwnedIdentity(t *testing.
 func TestPublicVerifyBundleRejectsSymlinkAndUnexpectedClosure(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	parent := t.TempDir()
+	parent := privateTempDir(t)
 	real := filepath.Join(parent, "real")
 	if err := publishBundleWithOptions(real, c, assets, defaultTransactionOptions()); err != nil {
 		t.Fatal(err)
@@ -532,7 +532,7 @@ func TestSecurePublishPreservesForeignAndReplacedEntriesAsResidualDebt(t *testin
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			parent := t.TempDir()
+			parent := privateTempDir(t)
 			out := filepath.Join(parent, "release")
 			opts := defaultTransactionOptions()
 			opts.hook = func(point string, tx *bundleTransaction) error {
@@ -566,7 +566,7 @@ func TestSecurePublishPreservesForeignAndReplacedEntriesAsResidualDebt(t *testin
 func TestSecurePublishAncestorSwapNeverWritesAttackerTree(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	root := t.TempDir()
+	root := privateTempDir(t)
 	parent := filepath.Join(root, "parent")
 	if err := os.Mkdir(parent, 0o700); err != nil {
 		t.Fatal(err)
@@ -608,7 +608,7 @@ func TestSecurePublishAncestorSwapNeverWritesAttackerTree(t *testing.T) {
 func TestSecurePublishVerifyTimeAssetSwapFailsClosed(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	parent := t.TempDir()
+	parent := privateTempDir(t)
 	out := filepath.Join(parent, "release")
 	opts := defaultTransactionOptions()
 	opts.hook = func(point string, tx *bundleTransaction) error {
@@ -641,7 +641,7 @@ func TestSecurePublishVerifyTimeAssetSwapFailsClosed(t *testing.T) {
 func TestSecurePublishAggregatesRootAndCleanupErrorsDeterministically(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	parent := t.TempDir()
+	parent := privateTempDir(t)
 	out := filepath.Join(parent, "release")
 	errSync := errors.New("sync cleanup evidence")
 	errClose := errors.New("close cleanup evidence")
@@ -684,7 +684,7 @@ func TestSecurePublishAggregatesRootAndCleanupErrorsDeterministically(t *testing
 func TestRevalidationCloseFailureIsRoleTargetedAndFailClosed(t *testing.T) {
 	t.Parallel()
 	c, assets := transactionFixture(t)
-	out := filepath.Join(t.TempDir(), "release")
+	out := filepath.Join(privateTempDir(t), "release")
 	errRevalidationClose := errors.New("revalidation close evidence")
 	calls := map[uint64]int{}
 	opts := defaultTransactionOptions()
@@ -759,7 +759,7 @@ func TestSecurePublishCloseOwnershipFailuresDoNotDoubleClose(t *testing.T) {
 		kind := kind
 		t.Run(kind, func(t *testing.T) {
 			t.Parallel()
-			parent := t.TempDir()
+			parent := privateTempDir(t)
 			out := filepath.Join(parent, "release")
 			opts := defaultTransactionOptions()
 			var targetOwner uint64
@@ -829,7 +829,7 @@ func TestSecurePublishInjectedWriteFsyncRenameEnumerationAndUnlinkFailures(t *te
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			parent := t.TempDir()
+			parent := privateTempDir(t)
 			out := filepath.Join(parent, "release")
 			opts := defaultTransactionOptions()
 			tc.configure(&opts)

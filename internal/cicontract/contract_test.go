@@ -37,7 +37,7 @@ func TestRejectsScannerToolchainBelowUpstreamMinimum(t *testing.T) {
 func TestRejectsCompatibilityLaneDrift(t *testing.T) {
 	t.Parallel()
 	c := testContract()
-	workflow := strings.Replace(testWorkflow("1.26.5"), "test:\n    go-version: '1.24.x'", "test:\n    go-version: '1.25.x'", 1)
+	workflow := strings.Replace(testWorkflow("1.26.6"), "test:\n    go-version: '1.24.x'", "test:\n    go-version: '1.25.x'", 1)
 	err := VerifyWorkflow(c, []byte(workflow))
 	if err == nil || !strings.Contains(err.Error(), "compatibility Go") {
 		t.Fatalf("error=%v", err)
@@ -56,8 +56,8 @@ func TestRejectsMissingOrDuplicatedCanonicalFuzzGate(t *testing.T) {
 	c := testContract()
 	canonical := "go run ./cmd/check-fuzz"
 	for name, workflow := range map[string]string{
-		"missing":   strings.Replace(testWorkflow("1.26.5"), canonical, "go test ./...", 1),
-		"duplicate": testWorkflow("1.26.5") + canonical + "\n",
+		"missing":   strings.Replace(testWorkflow("1.26.6"), canonical, "go test ./...", 1),
+		"duplicate": testWorkflow("1.26.6") + canonical + "\n",
 	} {
 		if err := VerifyWorkflow(c, []byte(workflow)); err == nil || !strings.Contains(err.Error(), "fuzz verifier") {
 			t.Errorf("%s error=%v", name, err)
@@ -67,7 +67,7 @@ func TestRejectsMissingOrDuplicatedCanonicalFuzzGate(t *testing.T) {
 
 func TestReleaseReproductionCommandOwnsOnlyParent(t *testing.T) {
 	t.Parallel()
-	canonical := testWorkflow("1.26.5")
+	canonical := testWorkflow("1.26.6")
 	if err := VerifyWorkflow(testContract(), []byte(canonical)); err != nil {
 		t.Fatal(err)
 	}
@@ -102,7 +102,7 @@ func TestReleaseReproductionCommandOwnsOnlyParent(t *testing.T) {
 	}
 }
 func testContract() Contract {
-	return Contract{SchemaVersion: "v1alpha1", License: releasecontract.CanonicalLicense, Govulncheck: Tool{Module: "golang.org/x/vuln/cmd/govulncheck", Version: "v1.6.0", MinimumGo: "1.25.0", UpstreamGoMod: "https://github.com/golang/vuln/blob/v1.6.0/go.mod"}, SecurityGo: "1.26.5", CompatibilityGo: "1.24"}
+	return Contract{SchemaVersion: "v1alpha1", License: releasecontract.CanonicalLicense, Govulncheck: Tool{Module: "golang.org/x/vuln/cmd/govulncheck", Version: "v1.6.0", MinimumGo: "1.25.0", UpstreamGoMod: "https://github.com/golang/vuln/blob/v1.6.0/go.mod"}, SecurityGo: "1.26.6", CompatibilityGo: "1.24"}
 }
 func testWorkflow(scanner string) string {
 	return "env:\n  GOTOOLCHAIN: local\njobs:\n  test:\n    go-version: '1.24.x'\n    run: go run ./cmd/check-fuzz\n    reproduce: |\n      parent=\"$(mktemp -d)\"\n      first=\"$parent/first\"\n      second=\"$parent/second\"\n      first_result=\"$parent/first-result.json\"\n      second_result=\"$parent/second-result.json\"\n      go run ./cmd/check-release-contract --build --commit HEAD --out \"$first\" --result \"$first_result\"\n      go run ./cmd/check-release-contract --build --commit HEAD --out \"$second\" --result \"$second_result\"\n      go run ./cmd/check-release-contract --out \"$first\" --verify-result \"$first_result\"\n      go run ./cmd/check-release-contract --out \"$second\" --verify-result \"$second_result\"\n      diff -rq \"$first\" \"$second\"\n  govulncheck:\n    go-version: '" + scanner + "'\n    summary: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    version: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    run: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n"

@@ -53,7 +53,7 @@ func TestGoalCannotCompleteWithOnlyVerifyReceipt(t *testing.T) {
 func TestGoalCompletesOnlyWithChecklistAndAllReceipts(t *testing.T) {
 	t.Parallel()
 	j := newTestJournal(t)
-	for _, phase := range Phases[:len(Phases)-1] {
+	for _, phase := range Phases()[:len(Phases())-1] {
 		if err := j.Advance(Receipt{Phase: phase, Summary: "phase complete", Evidence: newTestEvidence()}, testNow); err != nil {
 			t.Fatalf("%s: %v", phase, err)
 		}
@@ -271,7 +271,7 @@ func TestGoalBuildersPreservePresenceAndDoNotAlias(t *testing.T) {
 	if j.Goal.Acceptance[0].Acceptance != "all gates pass" || j.Goal.NonGoals[0] != "remote orchestration" || j.Goal.Receipts == nil {
 		t.Fatalf("New retained caller aliases: %#v", j.Goal)
 	}
-	for _, phase := range Phases[:len(Phases)-1] {
+	for _, phase := range Phases()[:len(Phases())-1] {
 		if err := j.Advance(Receipt{Phase: phase, Summary: "complete", Evidence: newTestEvidence()}, testNow); err != nil {
 			t.Fatal(err)
 		}
@@ -359,7 +359,7 @@ func newTestJournal(t *testing.T) Journal {
 }
 func advanceThrough(t *testing.T, j *Journal, last Phase) {
 	t.Helper()
-	for _, phase := range Phases {
+	for _, phase := range Phases() {
 		if err := j.Advance(Receipt{Phase: phase, Summary: "complete", Evidence: newTestEvidence()}, testNow); err != nil {
 			t.Fatal(err)
 		}

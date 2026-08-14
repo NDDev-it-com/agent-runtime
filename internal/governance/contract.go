@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
 	"strings"
 )
 
@@ -252,10 +251,4 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
-}
-
-func canonicalChecks(checks []requiredStatusCheck) []requiredStatusCheck {
-	out := append([]requiredStatusCheck(nil), checks...)
-	sort.Slice(out, func(i, j int) bool { return out[i].Context < out[j].Context })
-	return out
 }
