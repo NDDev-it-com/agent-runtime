@@ -24,6 +24,16 @@ symlink traversal before files are read or a working directory is selected.
 `Runner` assembles the context in manifest order, creates a deadline derived
 from the caller context, passes context on standard input, constructs a fresh
 environment from the allowlist, and captures a bounded combined output stream.
+The context limit bounds each instruction read rather than the assembled result,
+so an oversized file is rejected from its metadata instead of after allocation.
+
+The manifest timeout and the caller's own deadline both surface as
+`context.DeadlineExceeded` on the derived context, so `Runner` attaches a
+cancellation cause and attributes the termination from it. `Result.TimedOut`
+means the manifest timeout elapsed and `Result.Cancelled` means the caller ended
+the run; the observability layer maps them to distinct typed error evidence, and
+delivers the terminal observation on a context detached from the caller's so
+cancelling the work does not also cancel the record of it.
 The CLI always emits the result when a process was started, including non-zero
 exit and timeout information, then exits non-zero when the run failed.
 
@@ -33,6 +43,18 @@ Transitions are forward-only and deterministic. Every mutation validates the
 whole prior state, requires an optimistic revision, holds an exclusive lock,
 increments the revision, syncs a temporary file, atomically renames it, and
 syncs the directory. A completed Goal is immutable.
+
+Structural validity is necessary but not sufficient for a durable journal, so
+the store also owns the history. `Create` accepts only a genesis journal:
+revision one, the first phase, no receipts, no recorded acceptance evidence.
+`Update` snapshots the loaded journal, applies the caller's mutation, and then
+requires the result to be a legitimate successor — identity and non-goals are
+fixed, the phase advances by at most one, sealed receipt summaries, timestamps
+and closures cannot change, and receipt and acceptance evidence is append-only.
+A caller-supplied mutation therefore cannot produce a structurally valid but
+historically false journal. `Journal.Clone` exists because a `Journal` value
+shares its receipts map and evidence slices; any before/after comparison must
+clone rather than assign.
 
 The file lock uses the platform `flock` API available on the supported macOS
 and Linux targets. Windows support requires a separate locking implementation
