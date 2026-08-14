@@ -39,7 +39,11 @@ git:
 verification:
   commands:
     lint:
+      # staticcheck is pinned in security-tools.json and its pin is verified by
+      # check-ci-contract, so the version here is not a preference. It runs on
+      # the compatibility toolchain, in the same CI job as go vet.
       - "go vet ./..."
+      - "go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./..."
       - "go run ./cmd/check-module-tidy"
     test:
       - "go test -race ./..."
@@ -53,6 +57,12 @@ verification:
       - "go run ./cmd/check-ci-contract"
       - "go run ./cmd/check-governance-contract"
       - "go run ./cmd/check-release-contract"
+    full:
+      # govulncheck resolves the live vulnerability database and needs the
+      # patched security toolchain, not the compatibility one, so CI runs it in
+      # its own lane. It is recorded here rather than under lint because it
+      # cannot execute under the Go version the other lanes pin.
+      - "go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./..."
   required:
     - "lint"
     - "test"
