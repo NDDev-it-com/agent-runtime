@@ -68,6 +68,17 @@ verification:
     - "test"
     - "build"
     - "compatibility"
+  # The status checks the protected branch actually requires. This is a
+  # separate list from commands on purpose: a required context is a check-run
+  # name, not something derivable from a command, and stating it is what lets
+  # the consuming control plane compare the two. Drift is then reported in both
+  # directions — a branch check this list omits, or a claim the branch does not
+  # enforce. Governance holds the same four in governance/main-v1alpha1.json.
+  required_contexts:
+    - "test (ubuntu-latest)"
+    - "test (macos-latest)"
+    - "govulncheck"
+    - "Analyze (go)"
 
 agent:
   context_profile: "public-module"
