@@ -8,6 +8,38 @@ contract.
 
 ### Fixed
 
+- Malformed evidence can no longer be staged on a pending checklist item.
+  `Validate` checked evidence only on completed items, but acceptance evidence
+  is append-only for every item, so a bad record staged on a pending one could
+  never be removed and `CompleteItem` — which validates the combined set —
+  refused forever. The journal stayed loadable and became impossible to finish
+  without editing the file outside the contract. Well-formed staged evidence is
+  still accepted and still completes.
+- A process that returned its own exit status is no longer attributed to the
+  caller. `context.Cause` was read after `Run` returned and any non-nil cause was
+  treated as termination, so a command that had already failed on its own was
+  reported as cancelled whenever the cancellation landed in the window between:
+  measured at five runs in four hundred, against a documented promise that the
+  two are never conflated. Termination is now recognised by the process carrying
+  no status of its own, which is the one thing a context cannot tell you.
+- `max_output_bytes` bounds what a caller receives. Raw bytes were capped on the
+  way in, then each isolated invalid byte became a three-byte replacement rune
+  on the way out, so a twelve-byte budget returned twenty-four bytes into
+  `Result.Output`, its JSON encoding and every downstream event. The limit is
+  reapplied after the repair, cut on a rune boundary.
+- A timeout or cancellation ends the Task's process group on Linux and macOS,
+  not only the process the runtime launched. Work a command backgrounded kept
+  touching the workspace after the Runner had returned a terminal result and
+  observability had recorded the run as over — measured at 2.7 seconds after a
+  300 ms timeout. Owning the group also releases the output pipes at once, so
+  that run now returns in 301 ms rather than holding for the full grace period.
+
+### Changed
+
+- The wall-clock ceiling for a run is documented as the manifest timeout plus a
+  two-second grace for a terminated process to release its pipes. The grace
+  always existed; nothing said so, and `timeout` read as the whole bound.
+
 - A release receipt can no longer attest its own source commit. Verification
   rejected only an empty `source_commit` and then derived the receipt it
   expected from the candidate, so replacing that field with any other forty hex

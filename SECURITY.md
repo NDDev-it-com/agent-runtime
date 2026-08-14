@@ -17,7 +17,13 @@ five business days. Disclosure timing is coordinated after a fix is available.
 Task manifests and their command arrays must come from trusted, reviewed
 sources. Workspace path confinement protects instruction selection; it does not
 confine the process that is launched. Environment allowlisting reduces accidental
-credential inheritance but is not sufficient isolation. It also does not govern
+credential inheritance but is not sufficient isolation.
+
+On Linux and macOS a Task runs in its own process group and a timeout or
+cancellation terminates that group, so descendants do not continue acting on the
+workspace after the run is reported as over. That is bounded ownership of what
+the runtime launched, not containment: a process that leaves its group, or a
+platform other than these two, is outside it. It also does not govern
 which executable is selected: a bare command name is resolved against the
 `PATH` the runtime reads through `Runner.LookupEnv`, the same source that
 supplies the allowlisted values, so an embedder controls which executable runs

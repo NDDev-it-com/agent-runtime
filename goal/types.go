@@ -195,8 +195,21 @@ func (j Journal) Validate() error {
 		if item.Status != ItemPending && item.Status != ItemComplete {
 			return invalid("invalid checklist status for " + item.ID)
 		}
-		if item.Status == ItemComplete && validateEvidence(item.Evidence) != nil {
-			return invalid("completed checklist item lacks valid evidence: " + item.ID)
+		// A completed item must carry evidence. A pending one need not, but any
+		// evidence it does carry must already be valid, because acceptance
+		// evidence is append-only: a malformed record accepted here can never be
+		// removed, and CompleteItem validates the combined set, so the item
+		// becomes permanently uncompletable. Validating only completed items
+		// left that state reachable through any generic mutation.
+		switch {
+		case item.Status == ItemComplete:
+			if validateEvidence(item.Evidence) != nil {
+				return invalid("completed checklist item lacks valid evidence: " + item.ID)
+			}
+		case len(item.Evidence) > 0:
+			if validateEvidence(item.Evidence) != nil {
+				return invalid("pending checklist item carries evidence that could never be completed: " + item.ID)
+			}
 		}
 	}
 	if phaseIndex(j.Goal.CurrentPhase) < 0 {
