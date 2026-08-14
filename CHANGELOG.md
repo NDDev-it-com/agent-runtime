@@ -38,6 +38,9 @@ contract.
 
 ### Fixed
 
+- The quick start no longer instructs `go install ...@v0.1.0`. The repository has
+  no tag and no GitHub release, so that command failed for every reader; it now
+  installs from `@main` and says plainly that no version has been published.
 - Release output no longer depends on the umask of the shell that built it.
   `O_CREAT` and `mkdirat` subtract the process umask from a requested mode, so
   under `umask 077` every published asset was created `0600`, failed the
