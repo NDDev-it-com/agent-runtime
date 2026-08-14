@@ -8,6 +8,10 @@ contract.
 
 ### Added
 
+- Pinned `staticcheck` runs in the `test` job and is declared in
+  `security-tools.json` alongside the vulnerability scanner. `check-ci-contract`
+  verifies the pin is exact, is invoked only from that lane, and that the
+  compatibility toolchain satisfies the linter's own minimum Go.
 - `task.cancelled` carries the `cancelled` outcome for a Task ended by its
   caller, so the distinction the runtime now makes between a stopped Task and a
   failed one reaches consumers. It requires cancellation error evidence, an
@@ -38,6 +42,10 @@ contract.
 
 ### Removed
 
+- Unused `verify` wrapper in `internal/signatureverify`, the duplicate
+  `errSecurePublicationUnsupported` in the supported release-filesystem build,
+  and an unused archive test helper — the class of dead code `go vet` does not
+  report and static analysis now does.
 - Unused `canonicalChecks` in the governance contract and the unused `commit`
   parameter of the release SBOM builder.
 

@@ -21,6 +21,6 @@ func main() {
 	if err := cicontract.VerifyWorkflow(contract, workflow); err != nil {
 		fail(err)
 	}
-	fmt.Printf("CI contract valid: compatibility Go %s; security Go %s; %s@%s requires Go >= %s\n", contract.CompatibilityGo, contract.SecurityGo, contract.Govulncheck.Module, contract.Govulncheck.Version, contract.Govulncheck.MinimumGo)
+	fmt.Printf("CI contract valid: compatibility Go %s; security Go %s; %s@%s requires Go >= %s; %s@%s requires Go >= %s\n", contract.CompatibilityGo, contract.SecurityGo, contract.Govulncheck.Module, contract.Govulncheck.Version, contract.Govulncheck.MinimumGo, contract.Staticcheck.Module, contract.Staticcheck.Version, contract.Staticcheck.MinimumGo)
 }
 func fail(err error) { fmt.Fprintln(os.Stderr, "CI contract invalid:", err); os.Exit(1) }
