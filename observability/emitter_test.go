@@ -205,10 +205,12 @@ func TestEmitterRejectsUnboundedStreamCardinality(t *testing.T) {
 	}
 }
 
-func TestUnsafeIdentityAndZeroGoalRevisionAreRejected(t *testing.T) {
+func TestMalformedIdentityAndZeroGoalRevisionAreRejected(t *testing.T) {
 	memory, _ := NewMemorySink("memory", 1)
-	if _, err := NewEmitter(Runtime{ID: "provider-token", Version: "0.1.0"}, []Sink{memory}, Options{}); err == nil {
-		t.Fatal("unsafe runtime identity accepted")
+	for _, id := range []string{"", "runtime 1", "runtime/1", "-runtime", strings.Repeat("r", 129)} {
+		if _, err := NewEmitter(Runtime{ID: id, Version: "0.1.0"}, []Sink{memory}, Options{}); err == nil {
+			t.Fatalf("malformed runtime identity %q accepted", id)
+		}
 	}
 	draft := testDraft()
 	draft.Subject = Subject{Kind: SubjectGoal, ID: "goal-1"}

@@ -68,8 +68,8 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	}
 	defs := goal["$defs"].(map[string]any)
 	gotPhases := stringsFromAny(defs["phase"].(map[string]any)["enum"])
-	wantPhases := make([]string, len(goalpkg.Phases))
-	for i, p := range goalpkg.Phases {
+	wantPhases := make([]string, len(goalpkg.Phases()))
+	for i, p := range goalpkg.Phases() {
 		wantPhases[i] = string(p)
 	}
 	if !reflect.DeepEqual(gotPhases, wantPhases) {
