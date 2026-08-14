@@ -15,6 +15,13 @@ contract.
 
 ### Fixed
 
+- Signature and provenance verification runs in a checkout whose `.git` is a
+  pointer file. `internal/signatureverify` required `.git` to be a directory, so
+  a submodule or a linked worktree — the checkouts `docs/releasing.md` step 3
+  tells a maintainer to verify from — failed with `not a directory` before
+  reading a single Git object. The pointer's `gitdir:` target is now resolved and
+  held under the same no-follow, identity-bound discipline as the work tree, and
+  substituting the pointer after capture fails the run.
 - A completed Goal is immutable through every mutator. `AddReceiptEvidence` was
   missing the state guard its three siblings already had.
 - `Store.Update` now validates the semantic transition, not only the resulting

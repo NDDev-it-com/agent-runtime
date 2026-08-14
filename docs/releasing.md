@@ -37,7 +37,12 @@ covers every other asset and deliberately does not checksum itself.
    commit bound to the exact PR base/head/tree and successful exact-head check
    identities, and the owner SSH-signed annotated release tag. The verifier
    uses only the repository-owned `.github/release-allowed-signers` snapshot and
-   binds verification to held ancestor directory identities. On Darwin, the
+   binds verification to held ancestor directory identities. Where `.git` is a
+   pointer file rather than a directory — a submodule or a linked worktree — the
+   pointer is held by identity, its `gitdir:` target is resolved against the work
+   tree, and that directory is held under the same discipline before Git is given
+   it as `--git-dir`. A pointer that is rewritten or replaced after capture fails
+   the run. On Darwin, the
    only accepted ancestor alias is the root-owned canonical
    `/var -> private/var` system transition; Linux accepts no ancestor aliases.
    Every alias and directory identity is revalidated before and after Git runs.
