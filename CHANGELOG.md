@@ -34,6 +34,12 @@ contract.
   v0.55.0, `github.com/cloudflare/circl` v1.6.5, `govulncheck` v1.7.0 and
   `staticcheck` v0.7.0. `govulncheck` now reports 3 uncalled advisories in
   required modules where it previously reported 22.
+- `main` allows only two-parent merge commits. The governance contract required
+  all three merge methods to stay available while the provenance verifier binds
+  an integration commit to an exact PR base, head, tree and ordered parents; the
+  first squash or rebase would have produced a `main` that `check-provenance`
+  rejects and that no release could be cut from. The published governance schema
+  and the live repository ruleset were constrained with it.
 - Evidence flags on `goal check`, `goal evidence` and `goal advance` are
   repeatable, so one command can record several evidence records. A single
   triple behaves exactly as before; an unequal count is rejected.
