@@ -30,7 +30,10 @@ func TaskStartedDraft(id string, c Context) Draft {
 }
 func TaskResultDraft(result agentruntime.Result, errorEvidence *ErrorEvidence, c Context) Draft {
 	kind, outcome := TaskCompleted, OutcomeSucceeded
-	if !result.Accepted {
+	switch {
+	case result.Cancelled:
+		kind, outcome = TaskCancelled, OutcomeCancelled
+	case !result.Accepted:
 		kind, outcome = TaskFailed, OutcomeFailed
 	}
 	accepted, exit, timedOut, truncated := result.Accepted, result.ExitCode, result.TimedOut, result.Truncated

@@ -21,12 +21,20 @@ JSONL replay checkpoints to seed each stream's next sequence.
 Canonical event kinds are:
 
 - `task.validated`, `task.started`, `task.completed`, `task.failed`,
-  `task.blocked`;
+  `task.blocked`, `task.cancelled`;
 - `goal.created`, `goal.checklist_added`, `goal.checklist_completed`,
   `goal.receipt_evidence_added`, `goal.phase_transitioned`, `goal.completed`,
   `goal.blocked`;
 - `handoff.dispatched`, `handoff.accepted`, `handoff.completed`,
   `handoff.failed`, `handoff.blocked`.
+
+A Task ended by its caller is `task.cancelled` with outcome `cancelled`, not
+`task.failed`. The distinction is load-bearing: the work did not go wrong, it was
+stopped, and retry classification and operator metrics read it differently. It
+requires cancellation error evidence, an unaccepted result and no blocking
+evidence, so the outcome cannot be claimed without the evidence that justifies
+it. A Task that exceeds its own timeout remains `task.failed` with `timeout`
+error evidence, because that is the Task failing its own contract.
 
 The adapters derive these events from existing Task results and before/after
 Goal journals. They do not own another state machine.

@@ -274,7 +274,8 @@ func validateDraft(d Draft) error {
 func validateEventSemantics(kind EventKind, subject Subject, outcome Outcome, p Payload) error {
 	wantOutcome := map[EventKind]Outcome{
 		TaskValidated: OutcomeObserved, TaskStarted: OutcomeStarted, TaskCompleted: OutcomeSucceeded,
-		TaskFailed: OutcomeFailed, TaskBlocked: OutcomeBlocked, GoalCreated: OutcomeObserved,
+		TaskFailed: OutcomeFailed, TaskBlocked: OutcomeBlocked, TaskCancelled: OutcomeCancelled,
+		GoalCreated:        OutcomeObserved,
 		GoalChecklistAdded: OutcomeObserved, GoalChecklistCompleted: OutcomeObserved,
 		GoalReceiptEvidenceAdded: OutcomeObserved, GoalPhaseTransitioned: OutcomeObserved,
 		GoalCompleted: OutcomeSucceeded, GoalBlocked: OutcomeBlocked,
@@ -292,6 +293,9 @@ func validateEventSemantics(kind EventKind, subject Subject, outcome Outcome, p 
 	}
 	if kind == TaskBlocked && p.Blocking == nil {
 		return errors.New("blocked Task requires blocking evidence")
+	}
+	if kind == TaskCancelled && (p.Accepted == nil || *p.Accepted || p.Error == nil || p.Error.Class != ErrorClassCancellation || p.Blocking != nil) {
+		return errors.New("invalid cancelled Task evidence")
 	}
 	if subject.Kind == SubjectGoal {
 		if p.Revision != subject.Revision {

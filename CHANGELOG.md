@@ -8,6 +8,11 @@ contract.
 
 ### Added
 
+- `task.cancelled` carries the `cancelled` outcome for a Task ended by its
+  caller, so the distinction the runtime now makes between a stopped Task and a
+  failed one reaches consumers. It requires cancellation error evidence, an
+  unaccepted result and no blocking evidence. A Task that exceeds its own
+  timeout stays `task.failed`.
 - `Result.Cancelled` distinguishes a caller-ended run from a Task that exceeded
   its own timeout.
 
@@ -27,6 +32,9 @@ contract.
 
 ### Fixed
 
+- The published `cancelled` outcome is reachable. `schemas/lifecycle-event-v1alpha1.schema.json`
+  advertised it to every consumer while no event kind mapped to it, so no
+  producer could ever emit it.
 - A Goal closure carrying both a debt and a risk always emits `goal.completed`.
   The payload was validated before canonicalisation, so the randomised map order
   behind `debt_kinds` rejected roughly one completion in ten and a durably

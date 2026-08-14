@@ -9,7 +9,7 @@
   "properties": {
     "schema_version": { "const": "v1alpha1" },
     "event_id": { "type": "string", "pattern": "^evt_[0-9a-f]{32}$" },
-    "kind": { "enum": ["task.validated", "task.started", "task.completed", "task.failed", "task.blocked", "goal.created", "goal.checklist_added", "goal.checklist_completed", "goal.receipt_evidence_added", "goal.phase_transitioned", "goal.completed", "goal.blocked", "handoff.dispatched", "handoff.accepted", "handoff.completed", "handoff.failed", "handoff.blocked"] },
+    "kind": { "enum": ["task.validated", "task.started", "task.completed", "task.failed", "task.blocked", "task.cancelled", "goal.created", "goal.checklist_added", "goal.checklist_completed", "goal.receipt_evidence_added", "goal.phase_transitioned", "goal.completed", "goal.blocked", "handoff.dispatched", "handoff.accepted", "handoff.completed", "handoff.failed", "handoff.blocked"] },
     "subject": { "$ref": "#/$defs/subject" },
     "correlation_id": { "$ref": "#/$defs/stableId" },
     "causation_id": { "type": "string", "pattern": "^evt_[0-9a-f]{32}$" },
