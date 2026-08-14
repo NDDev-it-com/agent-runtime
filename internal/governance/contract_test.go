@@ -102,6 +102,10 @@ func TestContractRejectsSemanticWeakening(t *testing.T) {
 		func(c *Contract) { c.Policy.RequirePullRequest = false }, func(c *Contract) { c.Policy.RequiredApprovals = 1 }, func(c *Contract) { c.Policy.RequireReviewThreadResolution = true },
 		func(c *Contract) { c.Policy.RequireMergeQueue = true }, func(c *Contract) { c.Policy.RequiredDeployments = []string{"production"} }, func(c *Contract) { c.Repository.AllowAutoMerge = false },
 		func(c *Contract) { c.RequiredEffectiveRules = c.RequiredEffectiveRules[:2] },
+		func(c *Contract) { c.Policy.AllowedMergeMethods = []string{"merge", "squash", "rebase"} },
+		func(c *Contract) { c.Policy.AllowedMergeMethods = []string{"merge", "squash"} },
+		func(c *Contract) { c.Policy.AllowedMergeMethods = []string{"squash"} },
+		func(c *Contract) { c.Policy.AllowedMergeMethods = nil },
 	}
 	for i, mutate := range tests {
 		i, mutate := i, mutate
