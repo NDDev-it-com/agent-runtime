@@ -6,6 +6,14 @@ contract.
 
 ## [Unreleased]
 
+### Changed
+
+- The GDS repository anchor declares the status checks the protected branch
+  actually requires. `verification.commands` said how the module proves itself
+  locally and nothing said what a merge here enforces, so the branch could lose
+  a required check without any tracked file changing. The consuming control
+  plane now compares the two on every run and reports drift in both directions.
+
 ## [0.1.3] - 2026-08-14
 
 ### Changed
