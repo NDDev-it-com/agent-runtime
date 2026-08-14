@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 )
@@ -38,7 +39,13 @@ const (
 	PhaseClosure       Phase = "closure"
 )
 
-var Phases = []Phase{PhaseOrient, PhaseGapPlan, PhaseExecute, PhaseReconcile, PhaseSelfReview, PhaseOmissionAudit, PhaseVerify, PhaseClosure}
+// phases is the canonical ordered phase enumeration. It is unexported so that no
+// caller can reorder the state machine for the whole process.
+var phases = [8]Phase{PhaseOrient, PhaseGapPlan, PhaseExecute, PhaseReconcile, PhaseSelfReview, PhaseOmissionAudit, PhaseVerify, PhaseClosure}
+
+// Phases returns the canonical phase order. The result is a copy, so mutating it
+// cannot change the state machine.
+func Phases() []Phase { return append([]Phase(nil), phases[:]...) }
 
 type ErrorCode string
 
@@ -216,7 +223,7 @@ func (j Journal) Validate() error {
 	}
 	current := phaseIndex(j.Goal.CurrentPhase)
 	if j.Goal.State == StateActive {
-		for i, phase := range Phases {
+		for i, phase := range phases {
 			_, exists := j.Goal.Receipts[phase]
 			if exists != (i < current) {
 				return invalid("receipts do not match current phase")
@@ -234,6 +241,127 @@ func (j Journal) Validate() error {
 	return nil
 }
 
+// Clone returns a deep copy. A Journal value holds a receipts map and evidence
+// slices, so plain assignment shares mutable state with the original and a
+// "before" snapshot taken that way silently reflects later mutations. Callers
+// that compare two points of one Goal's history must Clone.
+func (j Journal) Clone() Journal {
+	out := j
+	out.Goal.NonGoals = cloneStrings(j.Goal.NonGoals)
+	if j.Goal.Acceptance != nil {
+		items := make([]ChecklistItem, len(j.Goal.Acceptance))
+		for index, item := range j.Goal.Acceptance {
+			item.Evidence = cloneEvidence(item.Evidence)
+			items[index] = item
+		}
+		out.Goal.Acceptance = items
+	}
+	if j.Goal.Receipts != nil {
+		receipts := make(map[Phase]Receipt, len(j.Goal.Receipts))
+		for phase, receipt := range j.Goal.Receipts {
+			receipts[phase] = cloneReceipt(receipt)
+		}
+		out.Goal.Receipts = receipts
+	}
+	return out
+}
+
+// IsGenesis reports whether j is an unstarted Goal: revision one, the first
+// phase, no receipts, and no recorded acceptance evidence. Only a genesis
+// journal may be created; every later state must be reached through a
+// validated transition.
+func (j Journal) IsGenesis() bool {
+	if j.Revision != 1 || j.Goal.State != StateActive || j.Goal.CurrentPhase != phases[0] || len(j.Goal.Receipts) != 0 {
+		return false
+	}
+	for _, item := range j.Goal.Acceptance {
+		if item.Status != ItemPending || len(item.Evidence) != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateTransitionFrom reports whether j is a legitimate successor of before.
+// Structural validity alone is not enough for a durable journal: identity,
+// sealed receipts and recorded acceptance history must survive every mutation.
+// Store applies this to the result of a caller-supplied mutation, so a generic
+// callback cannot persist a structurally valid but historically false journal.
+func (j Journal) ValidateTransitionFrom(before Journal) error {
+	if before.Goal.State != StateActive {
+		return transition("completed goals are immutable")
+	}
+	if j.Revision <= before.Revision {
+		return invalid("mutation did not advance revision")
+	}
+	if j.SchemaVersion != before.SchemaVersion || j.Goal.ID != before.Goal.ID || j.Goal.Intent != before.Goal.Intent || !j.Goal.CreatedAt.Equal(before.Goal.CreatedAt) {
+		return invalid("goal identity is immutable")
+	}
+	if !slices.Equal(j.Goal.NonGoals, before.Goal.NonGoals) {
+		return invalid("goal non-goals are immutable")
+	}
+	if j.Goal.UpdatedAt.Before(before.Goal.UpdatedAt) {
+		return invalid("goal updated_at moved backwards")
+	}
+	from, to := phaseIndex(before.Goal.CurrentPhase), phaseIndex(j.Goal.CurrentPhase)
+	if from < 0 || to < from || to > from+1 {
+		return transition("phase may only advance by one")
+	}
+	if err := validateReceiptSuccession(before.Goal.Receipts, j.Goal.Receipts); err != nil {
+		return err
+	}
+	return validateAcceptanceSuccession(before.Goal.Acceptance, j.Goal.Acceptance)
+}
+
+func validateReceiptSuccession(before, after map[Phase]Receipt) error {
+	for phase, sealed := range before {
+		current, exists := after[phase]
+		if !exists {
+			return invalid("receipt was removed for phase " + string(phase))
+		}
+		if current.Phase != sealed.Phase || current.Summary != sealed.Summary || !current.RecordedAt.Equal(sealed.RecordedAt) {
+			return invalid("sealed receipt was rewritten for phase " + string(phase))
+		}
+		if !equalClosure(current.Closure, sealed.Closure) {
+			return invalid("sealed closure was rewritten for phase " + string(phase))
+		}
+		if !isEvidencePrefix(sealed.Evidence, current.Evidence) {
+			return invalid("receipt evidence is append-only for phase " + string(phase))
+		}
+	}
+	return nil
+}
+
+func validateAcceptanceSuccession(before, after []ChecklistItem) error {
+	if len(after) < len(before) {
+		return invalid("acceptance checklist items cannot be removed")
+	}
+	for index, sealed := range before {
+		current := after[index]
+		if current.ID != sealed.ID || current.Acceptance != sealed.Acceptance {
+			return invalid("acceptance criterion is immutable: " + sealed.ID)
+		}
+		if sealed.Status == ItemComplete && current.Status != ItemComplete {
+			return invalid("completed acceptance item cannot revert: " + sealed.ID)
+		}
+		if !isEvidencePrefix(sealed.Evidence, current.Evidence) {
+			return invalid("acceptance evidence is append-only: " + sealed.ID)
+		}
+	}
+	return nil
+}
+
+func isEvidencePrefix(sealed, current []Evidence) bool {
+	return len(current) >= len(sealed) && slices.Equal(sealed, current[:len(sealed)])
+}
+
+func equalClosure(a, b *ClosureDetails) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	return a.AchievedOutcome == b.AchievedOutcome && a.Cleanup == b.Cleanup && slices.Equal(a.Remaining, b.Remaining) && slices.Equal(a.NextWork, b.NextWork)
+}
+
 func (j *Journal) CompleteItem(id string, evidence []Evidence, now time.Time) error {
 	if err := j.Validate(); err != nil {
 		return err
@@ -245,12 +373,17 @@ func (j *Journal) CompleteItem(id string, evidence []Evidence, now time.Time) er
 		return err
 	}
 	for i := range j.Goal.Acceptance {
-		if j.Goal.Acceptance[i].ID == id {
-			j.Goal.Acceptance[i].Status = ItemComplete
-			j.Goal.Acceptance[i].Evidence = append([]Evidence(nil), evidence...)
-			j.touch(now)
-			return nil
+		if j.Goal.Acceptance[i].ID != id {
+			continue
 		}
+		combined := append(cloneEvidence(j.Goal.Acceptance[i].Evidence), evidence...)
+		if err := validateEvidence(combined); err != nil {
+			return err
+		}
+		j.Goal.Acceptance[i].Status = ItemComplete
+		j.Goal.Acceptance[i].Evidence = combined
+		j.touch(now)
+		return nil
 	}
 	return invalid("unknown checklist item: " + id)
 }
@@ -282,6 +415,9 @@ func (j *Journal) AddChecklistItem(item ChecklistItem, now time.Time) error {
 func (j *Journal) AddReceiptEvidence(phase Phase, evidence Evidence, now time.Time) error {
 	if err := j.Validate(); err != nil {
 		return err
+	}
+	if j.Goal.State != StateActive {
+		return transition("completed goals are immutable")
 	}
 	if err := validateEvidence([]Evidence{evidence}); err != nil {
 		return err
@@ -339,7 +475,7 @@ func (j *Journal) Advance(receipt Receipt, now time.Time) error {
 		}
 		j.Goal.State = StateCompleted
 	} else {
-		j.Goal.CurrentPhase = Phases[index+1]
+		j.Goal.CurrentPhase = phases[index+1]
 	}
 	j.touch(now)
 	return nil
@@ -351,7 +487,7 @@ func (j Journal) completionPrerequisites() error {
 			return &Error{Code: CodeIncompleteChecklist, Message: "checklist item is not complete: " + item.ID}
 		}
 	}
-	for _, phase := range Phases {
+	for _, phase := range phases {
 		if _, ok := j.Goal.Receipts[phase]; !ok {
 			return &Error{Code: CodeMissingReceipt, Message: "missing phase receipt: " + string(phase)}
 		}
@@ -361,7 +497,7 @@ func (j Journal) completionPrerequisites() error {
 
 func (j *Journal) touch(now time.Time) { j.Revision++; j.Goal.UpdatedAt = now.UTC() }
 func phaseIndex(phase Phase) int {
-	for i, candidate := range Phases {
+	for i, candidate := range phases {
 		if candidate == phase {
 			return i
 		}

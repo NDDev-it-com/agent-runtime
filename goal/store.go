@@ -17,6 +17,9 @@ func (s Store) Create(j Journal) error {
 	if err := j.Validate(); err != nil {
 		return err
 	}
+	if !j.IsGenesis() {
+		return invalid("journal must be created in its genesis state")
+	}
 	if s.Path == "" {
 		return invalid("journal path is required")
 	}
@@ -67,14 +70,14 @@ func (s Store) Update(expectedRevision uint64, mutate func(*Journal) error) (Jou
 	if j.Revision != expectedRevision {
 		return Journal{}, &Error{Code: CodeConflict, Message: fmt.Sprintf("revision conflict: expected %d, found %d", expectedRevision, j.Revision)}
 	}
-	before := j.Revision
+	before := j.Clone()
 	if err := mutate(&j); err != nil {
 		return Journal{}, err
 	}
-	if j.Revision <= before {
-		return Journal{}, invalid("mutation did not advance revision")
-	}
 	if err := j.Validate(); err != nil {
+		return Journal{}, err
+	}
+	if err := j.ValidateTransitionFrom(before); err != nil {
 		return Journal{}, err
 	}
 	if err := s.write(j); err != nil {

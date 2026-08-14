@@ -6,6 +6,27 @@ contract.
 
 ## [Unreleased]
 
+### Changed
+
+- `goal.Phases` is now the function `goal.Phases()` returning a copy, so the
+  canonical phase order can no longer be reordered for the whole process.
+- `Journal.CompleteItem` appends acceptance evidence instead of replacing it,
+  matching the append-only semantics receipts already had.
+
+### Fixed
+
+- A completed Goal is immutable through every mutator. `AddReceiptEvidence` was
+  missing the state guard its three siblings already had.
+- `Store.Update` now validates the semantic transition, not only the resulting
+  shape. A caller-supplied mutation can no longer rewrite goal identity, sealed
+  receipt summaries, recorded timestamps, prior evidence, acceptance criteria or
+  completion status while remaining structurally valid.
+- `Store.Create` accepts only a genesis journal, so a fabricated multi-receipt
+  history can no longer be persisted without performing a single transition.
+- Added `Journal.Clone`. A `Journal` value shares its receipts map and evidence
+  slices, so a "before" snapshot taken by assignment silently reflected later
+  mutations.
+
 ### Security
 
 - Moved the pinned vulnerability-scanning lane from Go 1.26.5 to Go 1.26.6.
