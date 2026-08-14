@@ -69,10 +69,32 @@ func TestSnapshotRejectsRequiredCheckAndSettingsDrift(t *testing.T) {
 		}, "bypass"},
 		{"loose", func(s *Snapshot) {
 			mutateRuleParameter(t, &s.Rulesets[0], "required_status_checks", "strict_required_status_checks_policy", false)
-		}, "rules drift"},
+		}, "status-check policy drift"},
 		{"approval", func(s *Snapshot) {
 			mutateRuleParameter(t, &s.Rulesets[0], "pull_request", "required_approving_review_count", float64(1))
-		}, "rules drift"},
+		}, "review gates drift"},
+		{"merge method widened", func(s *Snapshot) {
+			mutateRuleParameter(t, &s.Rulesets[0], "pull_request", "allowed_merge_methods", []any{"merge", "squash"})
+		}, "allows merge methods"},
+		{"dismissal restricted", func(s *Snapshot) {
+			mutateRuleParameter(t, &s.Rulesets[0], "pull_request", "dismissal_restriction", map[string]any{"enabled": true, "allowed_actors": []any{}})
+		}, "restricts who may dismiss"},
+		{"required reviewers", func(s *Snapshot) {
+			mutateRuleParameter(t, &s.Rulesets[0], "pull_request", "required_reviewers", []any{map[string]any{"file_patterns": []any{"**"}}})
+		}, "specific reviewer set"},
+		{"check dropped", func(s *Snapshot) {
+			mutateRuleParameter(t, &s.Rulesets[0], "required_status_checks", "required_status_checks", []any{
+				map[string]any{"context": "test (ubuntu-latest)", "integration_id": float64(15368)},
+			})
+		}, "requires 1 checks"},
+		{"check app swapped", func(s *Snapshot) {
+			mutateRuleParameter(t, &s.Rulesets[0], "required_status_checks", "required_status_checks", []any{
+				map[string]any{"context": "test (ubuntu-latest)", "integration_id": float64(15368)},
+				map[string]any{"context": "test (macos-latest)", "integration_id": float64(15368)},
+				map[string]any{"context": "govulncheck", "integration_id": float64(15368)},
+				map[string]any{"context": "Analyze (go)", "integration_id": float64(99)},
+			})
+		}, "app identity drift"},
 		{"auto merge", func(s *Snapshot) { s.Repository.AllowAutoMerge = false }, "auto-merge"},
 		{"missing signature rule", func(s *Snapshot) { s.EffectiveRules = s.EffectiveRules[:2] }, "required_signatures"},
 		{"duplicate ruleset", func(s *Snapshot) { s.Rulesets = append(s.Rulesets, s.Rulesets[0]) }, "exactly one"},

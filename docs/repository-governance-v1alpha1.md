@@ -37,9 +37,38 @@ go run ./cmd/check-governance-contract
 ```
 
 Print the exact REST request body derived from the canonical contract with
-`go run ./cmd/check-governance-contract -print-ruleset`. Compare a normalized
-API capture with `-snapshot`; comparison fails closed on missing, duplicate,
-renamed, wrong-app, inactive, bypassed, loose, or otherwise drifting state.
+`go run ./cmd/check-governance-contract -print-ruleset`. Compare an API capture
+with `-snapshot`; comparison fails closed on missing, duplicate, renamed,
+wrong-app, inactive, bypassed, loose, or otherwise drifting state.
+
+Capture the live state with:
+
+```sh
+repo=NDDev-it-com/agent-runtime
+branch="$(gh api "repos/$repo" --jq .default_branch)"
+{
+  gh api "repos/$repo" --jq '{repository:{owner:.owner.login,name:.name,default_branch:.default_branch,allow_auto_merge:.allow_auto_merge}}'
+  gh api "repos/$repo/rulesets" --jq '[.[]|select(.target=="branch").id]' | jq -r '.[]' \
+    | while read -r id; do gh api "repos/$repo/rulesets/$id"; done \
+    | jq -s '{rulesets:[.[]|{source_type,source,name,target,enforcement,bypass_actors:(.bypass_actors//[]),conditions,rules}]}'
+  gh api "repos/$repo/commits/$branch/check-runs" --paginate \
+    --jq '[.check_runs[]|{context:.name,integration_id:.app.id}]' | jq -s '{available_checks:(add|unique_by(.context))}'
+  gh api "repos/$repo/actions/workflows" --jq '{workflows:[.workflows[]|{id,name,path,state}]}'
+  gh api "repos/$repo/rules/branches/$branch" \
+    --jq '{effective_rules:[.[]|{type,source_type:.ruleset_source_type,source:.ruleset_source}]|map(select(.type=="deletion" or .type=="non_fast_forward" or .type=="required_signatures"))}'
+} | jq -s 'add' > /tmp/governance-snapshot.json
+
+go run ./cmd/check-governance-contract --snapshot /tmp/governance-snapshot.json
+```
+
+Rules are compared through their typed parameters, not by raw JSON equality. A
+live ruleset read carries `dismissal_restriction` and `required_reviewers`,
+which the API returns but never accepts as input, so the request body derived
+from the contract does not contain them and a byte comparison could never
+succeed. Both are real policy surface — a restricted dismissal set or a
+required-reviewer list is a governance change this contract does not describe —
+so they are asserted to be neutral rather than ignored. Any rule parameter the
+contract does not model fails the comparison by name.
 
 The local CI workflow is checked for unconditional `pull_request` and main
 `push` coverage without path filters, exact required jobs, and its complete
