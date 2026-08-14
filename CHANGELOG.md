@@ -6,6 +6,11 @@ contract.
 
 ## [Unreleased]
 
+### Added
+
+- `Result.Cancelled` distinguishes a caller-ended run from a Task that exceeded
+  its own timeout.
+
 ### Changed
 
 - `goal.Phases` is now the function `goal.Phases()` returning a copy, so the
@@ -15,6 +20,20 @@ contract.
 
 ### Fixed
 
+- A caller deadline is no longer reported as a Task timeout. Both surface as
+  `context.DeadlineExceeded` on the derived context, so the runtime now attaches
+  a cancellation cause and attributes the termination from it.
+- Caller cancellation is preserved as typed evidence. The returned error wraps
+  the cancellation cause instead of only the process exit error, so a cancelled
+  run is reported as `cancelled`/`cancellation` rather than a generic execution
+  failure.
+- The terminal Task observation is delivered on a context detached from the
+  caller's. A cancelled run previously dropped its own terminal event because the
+  sink received the context that had just been cancelled.
+- `max_context_bytes` bounds the instruction read. An oversized file was read
+  into memory in full before the limit was compared, and the comparison omitted
+  the newline the assembler appends, so the result could exceed the declared
+  limit by one byte.
 - A completed Goal is immutable through every mutator. `AddReceiptEvidence` was
   missing the state guard its three siblings already had.
 - `Store.Update` now validates the semantic transition, not only the resulting
