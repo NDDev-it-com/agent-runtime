@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 14,
+  "revision": 15,
   "goal": {
     "id": "runtime-bounds-truth",
     "intent": "Task and Goal contracts enforce the bounds and outcomes they declare",
@@ -82,9 +82,33 @@
       "Sandbox untrusted commands",
       "Add Windows support"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Merged as PR #56 with all four required checks green.",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/56",
+            "result": "Merged to main."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:45:44.259561919Z",
+        "closure": {
+          "achieved_outcome": "The Task and Goal contracts enforce the bounds and outcomes they declare, and the wall-clock ceiling is stated rather than implied.",
+          "cleanup": "Task branch deleted locally and on origin.",
+          "remaining": [],
+          "next_work": [
+            {
+              "type": "issue",
+              "reference": "held path identity",
+              "result": "Close the JSONL sink's split between the file it reads and the file it writes, and state the remaining check-then-use gaps rather than implying they are closed."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Owning the process group also removed an undocumented overshoot: a 300ms timeout returned at 2.302s because the orphaned descendant held the inherited pipes for the full WaitDelay. It now returns at 301ms. The grace period is documented rather than removed, because a terminated process still needs bounded time to release its pipes.",
@@ -171,6 +195,6 @@
       }
     },
     "created_at": "2026-08-14T23:40:47.471824358Z",
-    "updated_at": "2026-08-14T23:41:15.508130592Z"
+    "updated_at": "2026-08-14T23:45:44.259561919Z"
   }
 }

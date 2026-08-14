@@ -360,3 +360,76 @@ func sinkCode(err error, code SinkErrorCode) bool {
 	var typed *SinkError
 	return errors.As(err, &typed) && typed.Code == code
 }
+
+// TestJSONLAppendsToTheFileItRead pins the guarantee that the recovered history
+// and the appends describe one object: replace the path after opening and the
+// sink keeps extending the file it recovered, leaving the impostor untouched.
+//
+// It does not reproduce the defect it accompanies. That was a window inside
+// OpenJSONLSink — the path was opened once to scan, closed, and opened again to
+// append, so a rename in between left duplicate-identity and size state
+// describing the first file while writes went to the second. The window is
+// closed by construction, by holding a single descriptor for the life of the
+// sink, and hitting it from outside would require a hook that exists only to be
+// hooked. What this test can do is fail if that construction is ever undone.
+func TestJSONLAppendsToTheFileItRead(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "events.jsonl")
+	sink, err := OpenJSONLSink(path, JSONLOptions{Name: "file", SyncEveryWrite: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	emitter := testEmitter(t, sink)
+	if _, report, err := emitter.Emit(context.Background(), testDraft()); err != nil || !report.Succeeded() {
+		t.Fatalf("err=%v report=%#v", err, report)
+	}
+
+	// The name now resolves to a different, empty file.
+	held := filepath.Join(dir, "held.jsonl")
+	if err := os.Rename(path, held); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, _, err := emitter.Emit(context.Background(), acceptedTaskDraft()); err != nil {
+		t.Fatal(err)
+	}
+	if results := emitter.Close(context.Background()); !results[0].Delivered {
+		t.Fatalf("close=%#v", results)
+	}
+
+	impostor, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(impostor) != 0 {
+		t.Fatalf("the sink wrote into the file that took over the path: %q", impostor)
+	}
+	events, _, err := ReplayJSONL(held)
+	if err != nil {
+		t.Fatalf("the file the sink actually held is unreadable: %v", err)
+	}
+	if len(events) != 2 {
+		t.Fatalf("the held file has %d events, want both writes", len(events))
+	}
+}
+
+// TestJSONLRefusesAPathThatResolvedElsewhere covers the other direction: a name
+// that no longer refers to the object just opened is a configuration the caller
+// did not make, so it is refused rather than followed.
+func TestJSONLRefusesAPathThatResolvedElsewhere(t *testing.T) {
+	dir := t.TempDir()
+	target := filepath.Join(dir, "target.jsonl")
+	if err := os.WriteFile(target, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.jsonl")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if _, err := OpenJSONLSink(link, JSONLOptions{Name: "file"}); err == nil {
+		t.Fatal("a symlinked destination was accepted")
+	}
+}

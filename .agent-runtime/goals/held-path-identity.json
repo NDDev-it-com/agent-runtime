@@ -1,0 +1,141 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 11,
+  "goal": {
+    "id": "held-path-identity",
+    "intent": "The JSONL sink writes to the file it read, and every remaining check-then-use gap is stated rather than implied",
+    "acceptance": [
+      {
+        "id": "jsonl-single-open",
+        "acceptance": "The sink scans and appends through one descriptor",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "observability/sink_jsonl.go OpenJSONLSink; readJSONLFile",
+            "result": "One descriptor, opened O_RDWR|O_APPEND, validated and then read from and appended to."
+          }
+        ]
+      },
+      {
+        "id": "stated-boundary",
+        "acceptance": "The security model names the remaining check-then-use gaps and what exploiting them requires",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "SECURITY.md",
+            "result": "Workspace and executable check-then-use are named, with what an actor needs and why executable_path records the inspected file."
+          }
+        ]
+      },
+      {
+        "id": "revisit-trigger",
+        "acceptance": "The deferral records the decision that would re-open it",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "SECURITY.md",
+            "result": "States that executing commands which are not fully trusted makes both real, and names descriptor-anchored traversal as the fix."
+          }
+        ]
+      }
+    ],
+    "non_goals": [
+      "Descriptor-anchor workspace traversal in this pass",
+      "Redesign the sandbox model",
+      "Defend against a compromised host"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Checked the other direction as well: a destination whose name resolves elsewhere, such as a symlink, is refused rather than followed, because a caller configured a destination and not whatever currently answers to it.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "observability TestJSONLRefusesAPathThatResolvedElsewhere",
+            "result": "A symlinked destination is rejected."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:50:11.199764768Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Split readJSONL into a path form and a descriptor form, opened the sink once with O_RDWR|O_APPEND|O_CREATE, validated that descriptor, and read the history from it. Removed the now-dead scanJSONL wrapper.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "observability/sink_jsonl.go",
+            "result": "One open for the sink's lifetime; the remaining os.Open is the separate read-only ReplayJSONL entry point."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:50:11.112800073Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Hold one descriptor for the sink's lifetime and read the history from it. Leave workspace and executable resolution as they are, and state them in the security model: both need concurrent write access to the machine already running the Task, which the stated trust boundary excludes.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "SECURITY.md trust boundary",
+            "result": "Manifests and their commands are trusted reviewed inputs, so a party who can rewrite a PATH directory can do so with or without a race."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:50:11.081411822Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Three surfaces validate a pathname and act on it later. The JSONL sink was the only one where the split is a plain correctness defect rather than a race against an actor: it opened the path to scan, closed it, and opened it again to append, so recovered state and writes could describe different files with no attacker involved beyond a rename.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "observability/sink_jsonl.go OpenJSONLSink",
+            "result": "scanJSONL opened and closed the path, then os.OpenFile opened it again; the SameFile check proved path equals descriptor at the second open, not that it was the file scanned."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:50:11.050697736Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "The behavioural test first written to cover this did not discriminate: it renamed the path after the sink was open, which both the old and the new code survive because both held a descriptor by then. Its comment was corrected to say what it actually pins.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "observability TestJSONLAppendsToTheFileItRead",
+            "result": "It fails if the single-descriptor construction is ever undone, and it does not claim to reproduce the original window."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:50:11.142761962Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "The window itself is closed by construction rather than by a test. Reproducing it from outside would need a hook that exists only to be hooked, which is the kind of control this repository is trying to remove, so the limitation is stated instead of dressed up.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "observability/sink_jsonl_test.go",
+            "result": "The test comment states plainly that it does not reproduce the defect it accompanies."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:50:11.171830052Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "gofmt, go vet, staticcheck, full tests under umask 002, race, and all six contract checkers.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local gate transcript 2026-08-15",
+            "result": "All green."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:50:11.227703174Z"
+      }
+    },
+    "created_at": "2026-08-14T23:50:11.022035863Z",
+    "updated_at": "2026-08-14T23:50:11.311924048Z"
+  }
+}

@@ -34,6 +34,28 @@ caller. `Result.executable_path` records the file that ran.
 Use an external sandbox for untrusted code and provide only short-lived,
 least-privilege credentials.
 
+### Paths validated and paths used
+
+Two runtime checks resolve a pathname and act on it a moment later rather than
+on the object they examined. Workspace resolution returns a validated string
+that `Open`, `Stat` and the child's working directory consume afterwards, and a
+command name is resolved by inspecting a candidate file that `exec` opens
+later. An actor able to rename or replace a directory or an executable in that
+interval can move the used object away from the checked one — so
+`Result.executable_path` records what was inspected, which under such a race is
+not necessarily what ran.
+
+Both require concurrent write access to the machine already running the Task,
+which is outside the trust boundary above: manifests and their commands are
+trusted, reviewed inputs, and a party who can rewrite a directory on the PATH
+can do so with or without a race. They are recorded here rather than closed
+because stating a gap is worth more than a control that does not remove it.
+
+This holds only while that trust boundary does. If this runtime is ever used to
+execute commands that are not fully trusted, these become real and the fix is
+descriptor-anchored traversal and execution — the mechanism the JSONL sink and
+the release publisher already use.
+
 Avoid placing secrets in manifests, instructions, command arguments, logs, or
 issue reports. Captured command output may contain sensitive data and should be
 handled accordingly by callers.
@@ -73,7 +95,10 @@ are re-evaluated key by key, bounded, copied, and JSON encoded; custom errors an
 stringers are never invoked. Redaction metadata contains only typed reasons and
 aggregate counts, not paths, hashes, lengths, or removed values.
 
-JSONL paths are trusted caller configuration. Existing files must be regular,
-owner-only, supported-version canonical JSONL. Symlinks, partial records,
+JSONL paths are trusted caller configuration. A sink opens its destination once
+and holds that descriptor for its lifetime, so the history it recovers and the
+records it appends describe one object; a name that no longer resolves to the
+object just opened is refused rather than followed. Existing files must be
+regular, owner-only, supported-version canonical JSONL. Symlinks, partial records,
 duplicates, unsupported versions, oversize files, and corruption fail closed.
 The sink does not encrypt data or protect against a compromised host.

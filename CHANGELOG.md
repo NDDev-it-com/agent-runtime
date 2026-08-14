@@ -8,6 +8,23 @@ contract.
 
 ### Fixed
 
+- A JSONL sink holds one descriptor for its lifetime. It used to open the path
+  to scan the existing history, close it, and open it again to append, so a
+  rename in between left the recovered duplicate-identity and size state
+  describing the first file while every write went to the second. A destination
+  whose name no longer resolves to the object just opened is refused rather than
+  followed.
+
+### Changed
+
+- The security model records the two check-then-use gaps that remain rather than
+  implying they are closed. Workspace resolution and executable resolution both
+  validate a pathname and act on it a moment later, so an actor with concurrent
+  write access to the running machine can move the used object away from the
+  checked one — which also means `executable_path` records what was inspected.
+  Both sit outside the stated trust boundary, and the entry says what would make
+  them real and what the fix would be if it ever changes.
+
 - Malformed evidence can no longer be staged on a pending checklist item.
   `Validate` checked evidence only on completed items, but acceptance evidence
   is append-only for every item, so a bad record staged on a pending one could
