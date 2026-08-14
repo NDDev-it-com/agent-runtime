@@ -40,6 +40,9 @@ covers every other asset and deliberately does not checksum itself.
    owner SSH-signed source commits, a GitHub OpenPGP-signed two-parent merge
    commit bound to the exact PR base/head/tree and successful exact-head check
    identities, and the owner SSH-signed annotated release tag. The verifier
+   binds the provider trust anchor by its pinned SHA-256 and fingerprint rather
+   than by the checked-out file's permission bits, so verification runs the same
+   under any umask; only world-writable trust material is refused. It
    uses only the repository-owned `.github/release-allowed-signers` snapshot and
    binds verification to held ancestor directory identities. Where `.git` is a
    pointer file rather than a directory — a submodule or a linked worktree — the

@@ -69,6 +69,15 @@ contract.
 
 ### Fixed
 
+- `check-provenance --integration` runs under a group-writable umask. The
+  provider trust anchor was refused unless its permission bits excluded group
+  write, but Git records the file `0644` and a checkout materialises it as
+  `0644 &^ umask`, so every clone made under the common `umask 002` produced
+  `0664` and failed before verifying anything — making step 3 of
+  `docs/releasing.md` unrunnable on those machines while CI, at `umask 022`,
+  never saw it. World-writable trust material is still refused; the integrity
+  binding is the pinned SHA-256 and the `SameFile` window around the read, both
+  of which detect substitution regardless of mode.
 - `check-governance-contract --snapshot` accepts a live API capture. Ruleset
   rules were compared by raw JSON equality against the request body derived from
   the contract, but GitHub's ruleset read always returns `dismissal_restriction`

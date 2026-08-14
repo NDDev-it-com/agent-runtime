@@ -615,7 +615,14 @@ func verifyOpenPGP(root string, contract Contract, payload, signature []byte, at
 	if err != nil {
 		return err
 	}
-	if !before.Mode().IsRegular() || before.Mode().Perm()&0o022 != 0 {
+	// World-writable trust material is refused. Group write is not, because Git
+	// records this file as 0644 and the checkout materialises it as 0644 &^ umask
+	// — under the common umask 002 every clone produces 0664, which the
+	// maintainer cannot influence without chmod-ing a tracked file. The integrity
+	// binding is the pinned digest checked below plus the SameFile window around
+	// the read, not this mode; refusing group write here only made the release
+	// procedure unrunnable on the machines it documents.
+	if !before.Mode().IsRegular() || before.Mode().Perm()&0o002 != 0 {
 		return errors.New("integration OpenPGP trust file type or mode is unsafe")
 	}
 	keyData, err := os.ReadFile(keyPath)

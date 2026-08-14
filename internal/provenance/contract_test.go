@@ -692,3 +692,94 @@ func TestPR15SanitizedSignatureCapture(t *testing.T) {
 		}
 	}
 }
+
+// TestTrustFileModeGateSurvivesTheCheckoutUmask covers the gate that guards the
+// pinned OpenPGP trust anchor. Git records the file 0644 and a checkout
+// materialises it as 0644 &^ umask, so a gate that refuses group write refuses
+// every clone made under the common umask 002 — which made the release
+// procedure documented in docs/releasing.md unrunnable on those machines. World
+// write is still refused; the integrity binding is the pinned digest and the
+// SameFile window, both exercised here.
+func TestTrustFileModeGateSurvivesTheCheckoutUmask(t *testing.T) {
+	t.Parallel()
+	contract, err := Load(filepath.Join("..", "..", "provenance", "v1alpha1.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	key, err := os.ReadFile(filepath.Join("..", "..", contract.IntegrationOpenPGPKey))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The modes a checkout of a 0644-recorded file produces under each umask,
+	// plus the world-writable mode that must still be refused.
+	for name, mode := range map[string]os.FileMode{
+		"umask 002": 0o664,
+		"umask 022": 0o644,
+		"umask 027": 0o640,
+		"umask 077": 0o600,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := trustRoot(t, contract, key, mode)
+			err := verifyOpenPGP(root, contract, nil, nil, time.Now())
+			if err != nil && strings.Contains(err.Error(), "type or mode is unsafe") {
+				t.Fatalf("mode %04o refused by the trust gate: %v", mode.Perm(), err)
+			}
+		})
+	}
+
+	for name, mode := range map[string]os.FileMode{
+		"world writable":       0o666,
+		"world writable owner": 0o646,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			root := trustRoot(t, contract, key, mode)
+			err := verifyOpenPGP(root, contract, nil, nil, time.Now())
+			if err == nil || !strings.Contains(err.Error(), "type or mode is unsafe") {
+				t.Fatalf("mode %04o accepted by the trust gate: %v", mode.Perm(), err)
+			}
+		})
+	}
+
+	t.Run("substituted key", func(t *testing.T) {
+		t.Parallel()
+		root := trustRoot(t, contract, append([]byte("tampered\n"), key...), 0o644)
+		err := verifyOpenPGP(root, contract, nil, nil, time.Now())
+		if err == nil || strings.Contains(err.Error(), "type or mode is unsafe") {
+			t.Fatalf("substituted trust key was not caught by the pinned digest: %v", err)
+		}
+	})
+
+	t.Run("directory in place of the key", func(t *testing.T) {
+		t.Parallel()
+		root := t.TempDir()
+		path := filepath.Join(root, contract.IntegrationOpenPGPKey)
+		if err := os.MkdirAll(path, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		err := verifyOpenPGP(root, contract, nil, nil, time.Now())
+		if err == nil || !strings.Contains(err.Error(), "type or mode is unsafe") {
+			t.Fatalf("non-regular trust file accepted: %v", err)
+		}
+	})
+}
+
+// trustRoot writes key at the contract's trust path under a fresh root, with an
+// exact mode that the ambient umask cannot reduce.
+func trustRoot(t *testing.T, contract Contract, key []byte, mode os.FileMode) string {
+	t.Helper()
+	root := t.TempDir()
+	path := filepath.Join(root, contract.IntegrationOpenPGPKey)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, key, mode); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, mode); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
