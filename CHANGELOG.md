@@ -69,6 +69,11 @@ contract.
 
 ### Fixed
 
+- The GDS repository anchor lists the verification commands CI actually runs.
+  `staticcheck` became a required CI step and `govulncheck` has always been one,
+  but neither appeared in `.gds/repository.yaml`, so the control plane's view of
+  how this module proves itself was two lanes short of the truth. Nothing
+  validates that correspondence, so the drift was silent.
 - `check-provenance --integration` runs under a group-writable umask. The
   provider trust anchor was refused unless its permission bits excluded group
   write, but Git records the file `0644` and a checkout materialises it as
