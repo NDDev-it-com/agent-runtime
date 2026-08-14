@@ -75,8 +75,14 @@ being loaded.
 
 A run that ends early reports why. `timed_out` means the manifest timeout
 elapsed; `cancelled` means the caller ended the run, either by cancelling its
-context or by reaching its own deadline. The two are never conflated, and the
-returned error wraps the caller's cause so `errors.Is` still works.
+context or by reaching its own deadline. Neither is reported for a process that
+returned its own exit status, however the context behaved meanwhile: a command
+that failed on its own is a failure, not a cancellation. The returned error
+wraps the caller's cause so `errors.Is` still works.
+
+The manifest timeout bounds the Task, not the call. A terminated run is given a
+two-second grace to release its output pipes before the runtime stops waiting,
+so the wall-clock ceiling for `Run` is the timeout plus that grace.
 
 The canonical distributable schema is
 [`schemas/task-manifest-v1alpha1.schema.json`](schemas/task-manifest-v1alpha1.schema.json).
@@ -187,8 +193,15 @@ and the canonical [event schema](schemas/lifecycle-event-v1alpha1.schema.json).
 Task manifests and commands are trusted inputs. The runtime resolves the workspace,
 working directory, and instruction files through symlinks and rejects paths that
 leave the workspace. Child processes receive only environment variables named
-by the manifest. Context and captured output are bounded, and cancellation or a
-timeout terminates the direct child process.
+by the manifest. Context and captured output are bounded, and the bound holds on
+what a caller receives: repairing invalid UTF-8 can lengthen output, so the
+limit is reapplied after the repair.
+
+On Linux and macOS the Task runs in its own process group and cancellation or a
+timeout terminates the group, so work the command backgrounded does not outlive
+the result. Elsewhere only the direct child is terminated. This bounds what the
+runtime started; a process that deliberately leaves its group is out of reach,
+and this is not a sandbox.
 
 A bare command name is resolved against the `PATH` the runtime reads through
 `Runner.LookupEnv` — the same source that supplies the values named by the

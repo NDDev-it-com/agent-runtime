@@ -372,3 +372,47 @@ func advanceThrough(t *testing.T, j *Journal, last Phase) {
 func closureReceipt() Receipt {
 	return Receipt{Phase: PhaseClosure, Summary: "closure recorded", Evidence: newTestEvidence(), Closure: &ClosureDetails{AchievedOutcome: "release ready", Cleanup: "temporary artifacts removed", Remaining: make([]RemainingWork, 0), NextWork: []Evidence{{Type: EvidenceFile, Reference: "ROADMAP.md", Result: "canonical follow-up queue"}}}}
 }
+
+// TestPendingEvidenceCannotPoisonAnItem covers a state a journal could reach
+// and never leave. Validate checked evidence only on completed items, but
+// acceptance evidence is append-only for every item, so a malformed record
+// staged on a pending one could never be removed and CompleteItem — which
+// validates the combined set — refused forever. The journal stayed valid to
+// Load and became impossible to finish without editing the file outside the
+// contract.
+func TestPendingEvidenceCannotPoisonAnItem(t *testing.T) {
+	t.Parallel()
+	now := time.Now().UTC()
+	journal, err := New("probe", "probe intent", []ChecklistItem{{ID: "a1", Acceptance: "must hold"}}, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, bad := range map[string]Evidence{
+		"no result":       {Type: EvidenceTest, Reference: "ref"},
+		"no reference":    {Type: EvidenceTest, Result: "passed"},
+		"unknown type":    {Type: "rumour", Reference: "ref", Result: "passed"},
+		"blank reference": {Type: EvidenceTest, Reference: "   ", Result: "passed"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			candidate := journal.Clone()
+			candidate.Goal.Acceptance[0].Evidence = []Evidence{bad}
+			if err := candidate.Validate(); err == nil {
+				t.Fatal("a pending item accepted evidence that could never be completed")
+			}
+		})
+	}
+
+	// Staging well-formed evidence on a pending item stays legitimate, and the
+	// item must still complete afterwards.
+	staged := journal.Clone()
+	staged.Goal.Acceptance[0].Evidence = []Evidence{{Type: EvidenceTest, Reference: "ref", Result: "passed"}}
+	if err := staged.Validate(); err != nil {
+		t.Fatalf("valid staged evidence rejected: %v", err)
+	}
+	if err := staged.CompleteItem("a1", []Evidence{{Type: EvidenceFile, Reference: "f", Result: "ok"}}, now); err != nil {
+		t.Fatalf("a staged item could not be completed: %v", err)
+	}
+	if staged.Goal.Acceptance[0].Status != ItemComplete || len(staged.Goal.Acceptance[0].Evidence) != 2 {
+		t.Fatalf("completion did not append: %#v", staged.Goal.Acceptance[0])
+	}
+}

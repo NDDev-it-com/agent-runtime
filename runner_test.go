@@ -9,9 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestRunnerSuccessAndEnvironmentAllowlist(t *testing.T) {
@@ -205,4 +207,125 @@ func TestResolutionFollowsLookupEnv(t *testing.T) {
 			}
 		}
 	})
+}
+
+// TestOutputBoundSurvivesUTF8Repair covers a bound that held on the way in and
+// not on the way out. Raw bytes were capped at max_output_bytes, then String
+// replaced each isolated invalid byte with a three-byte replacement rune, so a
+// twelve-byte budget returned twenty-four bytes into Result.Output, its JSON
+// encoding and every downstream event.
+func TestOutputBoundSurvivesUTF8Repair(t *testing.T) {
+	t.Parallel()
+	for name, test := range map[string]struct {
+		limit int64
+		raw   []byte
+	}{
+		"alternating invalid bytes": {12, []byte{0xff, 'a', 0xff, 'b', 0xff, 'c', 0xff, 'd', 0xff, 'e', 0xff, 'f'}},
+		"all invalid":               {8, []byte{0xff, 0xfe, 0xff, 0xfe, 0xff, 0xfe, 0xff, 0xfe}},
+		"one invalid at the edge":   {4, []byte{'a', 'b', 'c', 0xff}},
+		"valid multi-byte runes":    {9, []byte("日本語")},
+		"valid ascii":               {5, []byte("hello")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			b := &boundedBuffer{limit: test.limit}
+			if _, err := b.Write(test.raw); err != nil {
+				t.Fatal(err)
+			}
+			out := b.String()
+			if int64(len(out)) > test.limit {
+				t.Fatalf("returned %d bytes for a %d-byte budget", len(out), test.limit)
+			}
+			if !utf8.ValidString(out) {
+				t.Fatalf("returned invalid UTF-8: %q", out)
+			}
+		})
+	}
+}
+
+// TestTerminationAttributesTheRealCause covers the window where a process that
+// had already failed on its own was reported as ended by its caller. The
+// context alone cannot tell the two apart: it says only that cancellation
+// happened, not that it caused anything.
+func TestTerminationAttributesTheRealCause(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "instructions.md", "be useful")
+	workspace, err := OpenWorkspace(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failing := testManifest("/bin/sh", "")
+	failing.Command = []string{"/bin/sh", "-c", "exit 3"}
+	failing.Acceptance = TaskAcceptance{ExitCodes: []int{0}}
+	failing.Timeout = Duration{Duration: 30 * time.Second}
+	runner := Runner{Workspace: workspace}
+
+	// Sweep the cancellation across the whole tail of the run so it lands
+	// before, during and after the child's own exit.
+	const attempts = 300
+	for i := 0; i < attempts; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+		delay := time.Duration(500+(i%300)*10) * time.Microsecond
+		go func() { time.Sleep(delay); cancel() }()
+		result, _ := runner.Run(ctx, failing)
+		cancel()
+		if result.ExitCode == 3 && result.Cancelled {
+			t.Fatalf("a process that exited 3 on its own was attributed to the caller (attempt %d, cancel after %v)", i, delay)
+		}
+	}
+
+	// The two real terminations must still be told apart from each other.
+	blocking := failing
+	blocking.Command = []string{"/bin/sh", "-c", "sleep 30"}
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { time.Sleep(150 * time.Millisecond); cancel() }()
+	cancelled, _ := runner.Run(ctx, blocking)
+	cancel()
+	if !cancelled.Cancelled || cancelled.TimedOut {
+		t.Errorf("a caller cancellation reported cancelled=%v timed_out=%v", cancelled.Cancelled, cancelled.TimedOut)
+	}
+	blocking.Timeout = Duration{Duration: 150 * time.Millisecond}
+	timedOut, _ := runner.Run(context.Background(), blocking)
+	if !timedOut.TimedOut || timedOut.Cancelled {
+		t.Errorf("a manifest timeout reported cancelled=%v timed_out=%v", timedOut.Cancelled, timedOut.TimedOut)
+	}
+}
+
+// TestTerminationOwnsTheProcessTree covers descendants outliving the terminal
+// result. A Task that backgrounded work kept touching the workspace after the
+// Runner had returned a timeout and observability had recorded the run as over.
+func TestTerminationOwnsTheProcessTree(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skipf("process-group ownership is implemented for Linux and macOS, not %s", runtime.GOOS)
+	}
+	root := t.TempDir()
+	writeTestFile(t, root, "instructions.md", "be useful")
+	workspace, err := OpenWorkspace(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	marker := filepath.Join(root, "descendant-was-here")
+	manifest := testManifest("/bin/sh", "")
+	manifest.Command = []string{"/bin/sh", "-c", "(sleep 3; echo alive > '" + marker + "') >/dev/null 2>&1 & sleep 30"}
+	manifest.Acceptance = TaskAcceptance{ExitCodes: []int{0}}
+	manifest.Timeout = Duration{Duration: 300 * time.Millisecond}
+
+	started := time.Now()
+	result, _ := Runner{Workspace: workspace}.Run(context.Background(), manifest)
+	elapsed := time.Since(started)
+	if !result.TimedOut {
+		t.Fatalf("the run did not time out: %#v", result)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("the descendant had already written before the terminal result; the case proves nothing")
+	}
+	// The bound is the timeout plus the termination grace, and owning the group
+	// means the pipes close at once rather than being held for the full grace.
+	if elapsed > manifest.Timeout.Duration+terminationGrace {
+		t.Errorf("returned after %v, beyond the %v ceiling", elapsed, manifest.Timeout.Duration+terminationGrace)
+	}
+	time.Sleep(4 * time.Second)
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("a descendant wrote into the workspace after the terminal result")
+	}
 }

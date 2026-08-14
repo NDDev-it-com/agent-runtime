@@ -1,0 +1,176 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 14,
+  "goal": {
+    "id": "runtime-bounds-truth",
+    "intent": "Task and Goal contracts enforce the bounds and outcomes they declare",
+    "acceptance": [
+      {
+        "id": "explicit-zero",
+        "acceptance": "An explicitly zero timeout or byte limit is rejected rather than widened, with presence read from the document",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestStatedBoundsAreNotWidened",
+            "result": "Closed in the release proof chain: stated zero and negative bounds are refused and silence still defaults."
+          }
+        ]
+      },
+      {
+        "id": "evidence-integrity",
+        "acceptance": "Malformed evidence cannot persist on a pending item and no item becomes uncompletable",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "goal TestPendingEvidenceCannotPoisonAnItem",
+            "result": "Four malformed shapes are refused on a pending item and well-formed staged evidence still completes."
+          }
+        ]
+      },
+      {
+        "id": "cause-arbitration",
+        "acceptance": "A process that exited on its own is never reported as caller cancellation in either ordering",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestTerminationAttributesTheRealCause",
+            "result": "300 runs sweeping the cancellation window, none misattributed; genuine cancellation and genuine timeout still distinguished."
+          }
+        ]
+      },
+      {
+        "id": "output-bound",
+        "acceptance": "Returned and serialized output never exceed max_output_bytes after UTF-8 normalization",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestOutputBoundSurvivesUTF8Repair",
+            "result": "Five shapes including all-invalid and multi-byte runes stay within budget and remain valid UTF-8."
+          }
+        ]
+      },
+      {
+        "id": "process-ownership",
+        "acceptance": "Timeout and cancel own the process tree on Linux and Darwin with no post-terminal side effect",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestTerminationOwnsTheProcessTree",
+            "result": "No post-terminal write, and the run returns within the timeout plus grace ceiling."
+          }
+        ]
+      },
+      {
+        "id": "documented-overshoot",
+        "acceptance": "The termination grace period is documented as part of the wall-clock bound",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "README.md; runner.go terminationGrace",
+            "result": "The grace is a named constant and the ceiling is stated as the timeout plus that grace."
+          }
+        ]
+      }
+    ],
+    "non_goals": [
+      "Sandbox untrusted commands",
+      "Add Windows support"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Owning the process group also removed an undocumented overshoot: a 300ms timeout returned at 2.302s because the orphaned descendant held the inherited pipes for the full WaitDelay. It now returns at 301ms. The grace period is documented rather than removed, because a terminated process still needs bounded time to release its pipes.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "README.md; SECURITY.md",
+            "result": "The wall-clock ceiling is stated as the timeout plus the grace, and group ownership is described as bounded ownership rather than containment."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:41:15.181630807Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Added runner_process_unix.go and runner_process_other.go for group ownership, exitedOnItsOwn for cause arbitration, bound reapplication in boundedBuffer.String, and pending-item evidence validation in Journal.Validate.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "runner.go; runner_process_unix.go; runner_process_other.go; goal/types.go",
+            "result": "All four reproductions now fail closed and the legitimate paths are preserved."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:41:15.034054163Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Validate every non-empty evidence set regardless of status; recognise termination by the process carrying no exit status of its own; reapply the output bound after repair on a rune boundary; own the process group on the two supported platforms and document the grace period.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "runner.go; goal/types.go",
+            "result": "The zero-bound half of this goal was already closed in the release proof chain, where the schema parity test surfaced it."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:41:14.961616332Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Four declared guarantees did not hold. Validate checked evidence only on completed items while acceptance evidence is append-only for all of them; termination was inferred from context.Cause after the fact; the output bound was applied before UTF-8 repair rather than after; and only the direct child was terminated.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "reproductions recorded 2026-08-15",
+            "result": "5 of 400 runs reported a genuine exit-code-3 failure as caller cancellation; a 12-byte budget returned 24 bytes; a descendant wrote 2.698s after a 300ms timeout returned; a poisoned pending item could never be completed or repaired."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:41:14.900507003Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "The naive cause fix made attribution worse, not better: recording that cmd.Cancel ran raised misclassification from 5 in 400 to 17 in 400, because the hook fires even when the child had already exited and it races the tail of Wait. Arbitration needs the process status, which a killed process does not have.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "600-run sweep across the cancellation window",
+            "result": "0 misclassified, with genuine cancellation and genuine timeout still told apart from each other."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:41:15.087306525Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "The new files used build tags outside the repository's declared matrix ordering. Conformed to the existing convention rather than widening the allowlist, since the allowlist is the control.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/compilematrix TestRepositoryBuildConstraintsFitSupportedMatrix",
+            "result": "Both files now use the canonical darwin || linux and !darwin \u0026\u0026 !linux forms."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:41:15.130491801Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "gofmt, go vet, staticcheck v0.7.0, full tests under umask 002, race, and all six contract checkers.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local gate transcript 2026-08-15",
+            "result": "All green."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:41:15.222016594Z"
+      }
+    },
+    "created_at": "2026-08-14T23:40:47.471824358Z",
+    "updated_at": "2026-08-14T23:41:15.508130592Z"
+  }
+}
