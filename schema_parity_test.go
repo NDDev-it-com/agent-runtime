@@ -35,7 +35,7 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	if governance["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != "v1alpha1" {
 		t.Fatal("repository governance schema version drift")
 	}
-	if releaseContract["properties"].(map[string]any)["version"].(map[string]any)["const"] != "v0.1.0" || releaseManifest["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != "v1alpha1" {
+	if releaseContract["properties"].(map[string]any)["version"].(map[string]any)["const"] != "v0.1.1" || releaseManifest["properties"].(map[string]any)["schema_version"].(map[string]any)["const"] != "v1alpha1" {
 		t.Fatal("release schema identity drift")
 	}
 	buildResultProperties := releaseBuildResult["properties"].(map[string]any)

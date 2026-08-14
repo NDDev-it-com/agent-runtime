@@ -27,10 +27,8 @@ protocol, scheduler, or operating-system sandbox.
 
 Requires Go 1.25 or newer.
 
-No version has been published yet, so install from source:
-
 ```sh
-go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@main
+go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.1
 agent-runtime task validate --manifest examples/basic/agent.json --workspace examples/basic
 agent-runtime task run --manifest examples/basic/agent.json --workspace examples/basic
 ```
@@ -88,10 +86,11 @@ The canonical distributable schema is
 The project is released as a Go module/source product. It does not publish
 prebuilt platform binaries.
 
-**No release exists yet.** The repository has no tag and no GitHub release, so
-`@v0.1.0` does not resolve; use `@main` or an exact commit until the first
-version is published. The release machinery below is implemented and exercised
-on every pull request as a dry run, but it has never published.
+The first published release is `v0.1.1`. `v0.1.0` was tagged but never
+published: the release job pinned a Go toolchain below the module's own
+directive and failed before building an asset. Both that tag and its Go module
+proxy entry are immutable, so it is left in place and carries no release assets
+and no attestations. Use `v0.1.1` or later.
 
 Each tag-only release will contain one deterministic tracked-source archive, an
 SPDX 2.3 JSON SBOM, canonical release notes, a release manifest, and

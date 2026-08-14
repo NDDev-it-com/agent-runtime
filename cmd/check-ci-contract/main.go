@@ -14,6 +14,13 @@ func main() {
 	if err != nil {
 		fail(err)
 	}
+	release, err := os.ReadFile(".github/workflows/release.yml")
+	if err != nil {
+		fail(err)
+	}
+	if err := cicontract.VerifyRelease(contract, release); err != nil {
+		fail(err)
+	}
 	workflow, err := os.ReadFile(".github/workflows/ci.yml")
 	if err != nil {
 		fail(err)
