@@ -191,8 +191,10 @@ by the manifest. Context and captured output are bounded, and cancellation or a
 timeout terminates the direct child process.
 
 A bare command name is still resolved through the *caller's* `PATH`, not the
-manifest's, so the manifest does not decide which binary runs and the resolved
-path is not recorded. Give an absolute path when that matters
+manifest's, so the manifest does not decide which binary runs. The choice is at
+least recorded: `Result.executable_path` carries the file that actually ran, and
+is empty when the name could not be resolved. Give an absolute path when the
+manifest must decide
 ([issue #46](https://github.com/NDDev-it-com/agent-runtime/issues/46)).
 
 These controls are not a sandbox. A trusted command can still access files,

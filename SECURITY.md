@@ -20,7 +20,9 @@ confine the process that is launched. Environment allowlisting reduces accidenta
 credential inheritance but is not sufficient isolation. It also does not govern
 which executable is selected: a bare command name is resolved against the
 caller's `PATH` before the child environment is applied, so the host, not the
-manifest, decides which binary runs. Pass an absolute path where that matters.
+manifest, decides which binary runs. `Result.executable_path` records the file
+that ran, so the choice is auditable after the fact. Pass an absolute path where
+the manifest must decide.
 Use an external sandbox for untrusted code and provide only short-lived,
 least-privilege credentials.
 

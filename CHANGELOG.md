@@ -8,6 +8,13 @@ contract.
 
 ### Changed
 
+- `Result.executable_path` records the file a run actually executed. A bare
+  command name is resolved through the caller's `PATH`, so the manifest does not
+  decide which binary runs (#46) and the run previously discarded the answer —
+  two hosts could execute different binaries from the same manifest with nothing
+  to show for it. Resolution now happens once, in the runtime, and the resolved
+  absolute path is reported. The field is empty when the name does not resolve,
+  and that failure keeps the error and exit code it always had.
 - The security model documents two boundaries it previously left to inference.
   A bare command name is resolved through the caller's `PATH` before the child
   environment is applied, so the manifest does not decide which binary runs
