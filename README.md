@@ -146,7 +146,10 @@ The canonical distributable schema is
 [`schemas/goal-journal-v1alpha1.schema.json`](schemas/goal-journal-v1alpha1.schema.json).
 
 Evidence discovered later can be appended to an existing receipt with
-`goal evidence`; receipt summaries and existing evidence remain immutable.
+`goal evidence`; receipt summaries and existing evidence remain immutable. The
+`--*-type`, `--*-ref` and `--*-result` flags are repeatable and positional with
+respect to each other, so one command can record several evidence records; an
+unequal count is rejected rather than silently truncated.
 
 The journal is designed for durable evidence, so commit it when it represents
 public project work. The adjacent `*.lock` file is ephemeral and ignored.

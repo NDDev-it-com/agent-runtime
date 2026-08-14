@@ -74,3 +74,58 @@ func TestGoalCLIRestartAndCompletionGuard(t *testing.T) {
 		t.Fatalf("shortcut error=%v", err)
 	}
 }
+
+func TestEmptyInvocationIsACallerError(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if err := run(nil, &stdout, &stderr); err == nil {
+		t.Fatal("an empty invocation reported success")
+	}
+	if !strings.Contains(stderr.String(), "usage: agent-runtime") {
+		t.Fatalf("usage was not written to stderr: %q", stderr.String())
+	}
+	stdout.Reset()
+	stderr.Reset()
+	if err := run([]string{"help"}, &stdout, &stderr); err != nil {
+		t.Fatalf("help reported failure: %v", err)
+	}
+	if !strings.Contains(stdout.String(), "usage: agent-runtime") {
+		t.Fatalf("help was not written to stdout: %q", stdout.String())
+	}
+}
+
+func TestGoalEvidenceFlagsAreRepeatable(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "goal.json")
+	var out, stderr bytes.Buffer
+	if err := run([]string{"goal", "init", "--journal", path, "--id", "repeatable", "--intent", "prove repeatable evidence", "--acceptance", "done=every gate passes"}, &out, &stderr); err != nil {
+		t.Fatal(err)
+	}
+	out.Reset()
+	if err := run([]string{
+		"goal", "check", "--journal", path, "--revision", "1", "--item", "done",
+		"--evidence-type", "test", "--evidence-ref", "go test ./...", "--evidence-result", "passed",
+		"--evidence-type", "command", "--evidence-ref", "go vet ./...", "--evidence-result", "clean",
+	}, &out, &stderr); err != nil {
+		t.Fatalf("repeated evidence rejected: %v stderr=%s", err, stderr.String())
+	}
+	var journal goalpkg.Journal
+	if err := json.Unmarshal(out.Bytes(), &journal); err != nil {
+		t.Fatal(err)
+	}
+	if got := journal.Goal.Acceptance[0].Evidence; len(got) != 2 {
+		t.Fatalf("evidence records=%d, want 2: %#v", len(got), got)
+	}
+	out.Reset()
+	err := run([]string{
+		"goal", "add", "--journal", path, "--revision", "2", "--id", "extra", "--acceptance", "another criterion",
+	}, &out, &stderr)
+	if err != nil {
+		t.Fatalf("add rejected: %v", err)
+	}
+	stderr.Reset()
+	if err := run([]string{
+		"goal", "advance", "--journal", path, "--revision", "3", "--phase", "orient", "--summary", "oriented",
+		"--evidence-type", "command", "--evidence-ref", "git status --short",
+	}, &out, &stderr); err == nil || !strings.Contains(err.Error(), "repeated together") {
+		t.Fatalf("mismatched evidence flags accepted: %v", err)
+	}
+}

@@ -13,6 +13,12 @@ contract.
 
 ### Changed
 
+- Evidence flags on `goal check`, `goal evidence` and `goal advance` are
+  repeatable, so one command can record several evidence records. A single
+  triple behaves exactly as before; an unequal count is rejected.
+- `agent-runtime` with no arguments prints usage to standard error and exits
+  non-zero. `help`, `-h` and `--help` still print to standard output and exit
+  zero.
 - `NewEmitter` rejects a maximum sensitivity above `internal`. An envelope may
   only carry `public` and `internal` attributes, so a higher maximum let
   redaction pass an attribute that envelope validation then rejected, discarding
@@ -27,6 +33,14 @@ contract.
 
 ### Fixed
 
+- The distributable Goal schema matches the Go contract. Checklist item
+  identifiers were unconstrained while the runtime enforced an identifier
+  grammar, and receipts accepted any property name while the runtime requires a
+  phase, so a journal the runtime rejects still validated against the published
+  schema.
+- Schema parity now also covers the event `outcome`, `attempt`, subject kind,
+  actor kind and handoff role vocabularies, and checks the Goal identifier
+  grammar behaviourally against the state machine in both directions.
 - A Goal closure carrying both a debt and a risk always emits `goal.completed`.
   The payload was validated before canonicalisation, so the randomised map order
   behind `debt_kinds` rejected roughly one completion in ten and a durably
