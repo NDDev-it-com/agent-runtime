@@ -45,7 +45,7 @@ func OpenJSONLSink(path string, options JSONLOptions) (*JSONLSink, error) {
 	if maxBytes < MaxEnvelopeBytes || maxBytes > MaximumMaxFileBytes {
 		return nil, &SinkError{Code: SinkFailure}
 	}
-	ids, size, err := scanJSONL(path, maxBytes)
+	history, err := scanJSONL(path, maxBytes)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +59,7 @@ func OpenJSONLSink(path string, options JSONLOptions) (*JSONLSink, error) {
 		_ = file.Close()
 		return nil, &SinkError{Code: SinkFailure}
 	}
-	return &JSONLSink{name: options.Name, file: file, syncEveryWrite: options.SyncEveryWrite, ids: ids, maxFileBytes: maxBytes, size: size}, nil
+	return &JSONLSink{name: options.Name, file: file, syncEveryWrite: options.SyncEveryWrite, ids: history.ids, maxFileBytes: maxBytes, size: history.size}, nil
 }
 func newJSONLSinkWriter(name string, file syncWriteCloser, syncEveryWrite bool) (*JSONLSink, error) {
 	if !safeID(name) || file == nil {
@@ -149,94 +149,99 @@ func (s *JSONLSink) Close(ctx context.Context) error {
 	return nil
 }
 
-func scanJSONL(path string, maxBytes int64) (map[string]bool, int64, error) {
-	ids := map[string]bool{}
+// jsonlHistory is the validated state of an existing JSONL file.
+type jsonlHistory struct {
+	ids       map[string]bool
+	sequences map[string]uint64
+	size      int64
+}
+
+// scanJSONL validates an existing history without retaining its envelopes.
+func scanJSONL(path string, maxBytes int64) (jsonlHistory, error) {
+	return readJSONL(path, maxBytes, nil)
+}
+
+// readJSONL is the single definition of a valid JSONL history: canonical
+// single-line envelopes, a newline-terminated final record, unique event
+// identity, and a strictly increasing sequence within each subject stream. The
+// sink applies it before appending and ReplayJSONL applies it before restoring,
+// so one file can never be acceptable to append to yet impossible to replay.
+// When collect is non-nil every decoded envelope is appended to it in file order.
+func readJSONL(path string, maxBytes int64, collect *[]Envelope) (jsonlHistory, error) {
+	history := jsonlHistory{ids: map[string]bool{}, sequences: map[string]uint64{}}
 	file, err := os.Open(path)
 	if os.IsNotExist(err) {
-		return ids, 0, nil
+		return history, nil
 	}
 	if err != nil {
-		return nil, 0, &SinkError{Code: SinkUnavailable, Retryable: true}
+		return jsonlHistory{}, &SinkError{Code: SinkUnavailable, Retryable: true}
 	}
 	defer file.Close()
 	info, err := file.Stat()
 	if err != nil {
-		return nil, 0, &SinkError{Code: SinkUnavailable, Retryable: true}
+		return jsonlHistory{}, &SinkError{Code: SinkUnavailable, Retryable: true}
 	}
 	if !info.Mode().IsRegular() || info.Size() > maxBytes {
-		return nil, 0, &SinkError{Code: SinkBackpressure}
+		return jsonlHistory{}, &SinkError{Code: SinkBackpressure}
 	}
 	if info.Size() > 0 {
 		if _, err := file.Seek(-1, io.SeekEnd); err != nil {
-			return nil, 0, &SinkError{Code: SinkCorruptData}
+			return jsonlHistory{}, &SinkError{Code: SinkCorruptData}
 		}
 		last := []byte{0}
 		if _, err := io.ReadFull(file, last); err != nil || last[0] != '\n' {
-			return nil, 0, &SinkError{Code: SinkPartialWrite}
+			return jsonlHistory{}, &SinkError{Code: SinkPartialWrite}
 		}
 		if _, err := file.Seek(0, io.SeekStart); err != nil {
-			return nil, 0, &SinkError{Code: SinkCorruptData}
+			return jsonlHistory{}, &SinkError{Code: SinkCorruptData}
 		}
 	}
 	scanner := bufio.NewScanner(file)
 	scanner.Buffer(make([]byte, 4096), MaxEnvelopeBytes+1)
 	for scanner.Scan() {
-		if len(ids) >= MaxReplayEvents {
-			return nil, 0, &SinkError{Code: SinkBackpressure}
+		if len(history.ids) >= MaxReplayEvents {
+			return jsonlHistory{}, &SinkError{Code: SinkBackpressure}
 		}
 		line := append([]byte(nil), scanner.Bytes()...)
 		var event Envelope
 		if err := event.UnmarshalJSON(line); err != nil {
 			if strings.Contains(err.Error(), "unsupported event schema_version") {
-				return nil, 0, &SinkError{Code: SinkUnsupportedVersion}
+				return jsonlHistory{}, &SinkError{Code: SinkUnsupportedVersion}
 			}
-			return nil, 0, &SinkError{Code: SinkCorruptData}
+			return jsonlHistory{}, &SinkError{Code: SinkCorruptData}
 		}
 		canonical, err := event.CanonicalJSON()
 		if err != nil || !bytes.Equal(line, canonical) {
-			return nil, 0, &SinkError{Code: SinkCorruptData}
-		}
-		if ids[event.EventID()] {
-			return nil, 0, &SinkError{Code: SinkCorruptData}
-		}
-		ids[event.EventID()] = true
-	}
-	if err := scanner.Err(); err != nil {
-		return nil, 0, &SinkError{Code: SinkCorruptData}
-	}
-	return ids, info.Size(), nil
-}
-
-func ReplayJSONL(path string) ([]Envelope, map[string]uint64, error) {
-	if _, _, err := scanJSONL(path, MaximumMaxFileBytes); err != nil {
-		return nil, nil, err
-	}
-	file, err := os.Open(path)
-	if err != nil {
-		return nil, nil, &SinkError{Code: SinkUnavailable, Retryable: true}
-	}
-	defer file.Close()
-	scanner := bufio.NewScanner(file)
-	scanner.Buffer(make([]byte, 4096), MaxEnvelopeBytes+1)
-	events := []Envelope{}
-	sequences := map[string]uint64{}
-	for scanner.Scan() {
-		if len(events) >= MaxReplayEvents {
-			return nil, nil, &SinkError{Code: SinkBackpressure}
-		}
-		var event Envelope
-		if err := event.UnmarshalJSON(scanner.Bytes()); err != nil {
-			return nil, nil, &SinkError{Code: SinkCorruptData}
+			return jsonlHistory{}, &SinkError{Code: SinkCorruptData}
 		}
 		key := streamKey(event.Subject())
-		if event.Sequence() <= sequences[key] {
-			return nil, nil, &SinkError{Code: SinkCorruptData}
+		if history.ids[event.EventID()] || event.Sequence() <= history.sequences[key] {
+			return jsonlHistory{}, &SinkError{Code: SinkCorruptData}
 		}
-		sequences[key] = event.Sequence()
-		events = append(events, event)
+		history.ids[event.EventID()] = true
+		history.sequences[key] = event.Sequence()
+		if collect != nil {
+			*collect = append(*collect, event)
+		}
 	}
 	if err := scanner.Err(); err != nil {
-		return nil, nil, &SinkError{Code: SinkCorruptData}
+		return jsonlHistory{}, &SinkError{Code: SinkCorruptData}
 	}
-	return events, sequences, nil
+	history.size = info.Size()
+	return history, nil
+}
+
+// ReplayJSONL restores every envelope and the next sequence per subject stream.
+// A missing file is an explicit failure rather than an empty history, because
+// replaying a checkpoint that is not there is a caller error, not a fresh start.
+func ReplayJSONL(path string) ([]Envelope, map[string]uint64, error) {
+	if _, err := os.Lstat(path); err != nil {
+		return nil, nil, &SinkError{Code: SinkUnavailable, Retryable: true}
+	}
+	events := []Envelope{}
+	history, err := readJSONL(path, MaximumMaxFileBytes, &events)
+	if err != nil {
+		return nil, nil, err
+	}
+	return events, history.sequences, nil
 }

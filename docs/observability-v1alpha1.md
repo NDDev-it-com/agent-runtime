@@ -34,11 +34,19 @@ Goal journals. They do not own another state machine.
 ## Redaction boundary
 
 Raw attributes exist only in `Draft`. `Emitter.Emit` applies `Policy` before it
-constructs an `Envelope`; every `Sink` receives only an envelope. The default
-policy permits bounded `public` and `internal` scalars/collections. It denies
-`confidential`, `secret`, unknown sensitivity, binary data, invalid/cyclic or
-unsupported structures, errors, formatters/stringers, raw commands,
+constructs an `Envelope`; every `Sink` receives only an envelope. An envelope may
+carry only `public` and `internal` attributes, so `NewEmitter` refuses any higher
+maximum sensitivity rather than letting redaction pass an attribute that envelope
+validation then rejects, which would discard the whole observation. The policy
+denies `confidential`, `secret`, unknown sensitivity, binary data, invalid/cyclic
+or unsupported structures, errors, formatters/stringers, raw commands,
 environment/provider content, credentials, tokens, and URLs.
+
+The word list applies to attribute names, nested keys and values. It is not
+applied to identities. A runtime, sink, correlation, subject or actor identifier
+is validated against the identity grammar only, because an identifier carries no
+value and filtering it there rejected Task identities the manifest contract
+accepts.
 
 Nested map keys are reclassified independently. Strings, depth, collection
 length, attribute count, and total canonical envelope bytes are bounded.
@@ -59,7 +67,11 @@ Task result or Goal journal and cannot disappear from the caller.
 `JSONLSink` appends canonical envelopes under a lock, optionally syncs every
 record, detects duplicates on restart, rejects unsupported/corrupt/partial
 records, becomes poisoned after an uncertain partial write, and has explicit
-`Flush`/idempotent `Close` behavior. JSONL is an observability derivative, not a
+`Flush`/idempotent `Close` behavior. Opening the sink and replaying a file share
+one definition of a valid history — canonical single-line envelopes, a
+newline-terminated final record, unique event identity, and a strictly increasing
+sequence within each subject stream — so a file can never be acceptable to append
+to yet impossible to replay. JSONL is an observability derivative, not a
 journal or recovery authority.
 
 ## Compatibility and rollback

@@ -415,7 +415,13 @@ func validSubject(s Subject) bool {
 func validActor(a Actor) bool {
 	return (a.Kind == ActorBrain || a.Kind == ActorOrchestrator || a.Kind == ActorDispatcher || a.Kind == ActorWorker || a.Kind == ActorRuntime) && safeID(a.ID)
 }
-func safeID(value string) bool { return stableID.MatchString(value) && !unsafeName(value) }
+
+// safeID validates an identity: a runtime, sink, correlation, subject or actor
+// name. It deliberately does not apply the redaction word list, which exists to
+// keep secret-looking attribute *values* out of a sink. An identifier carries no
+// value, and filtering it there rejected Task identities the manifest contract
+// accepts — "run-command" or "fetch-url", and "curl" for containing "url".
+func safeID(value string) bool { return stableID.MatchString(value) }
 func validAttempt(a Attempt) bool {
 	return a == AttemptInitial || a == AttemptRetry || a == AttemptRecovery || a == AttemptReplay
 }
