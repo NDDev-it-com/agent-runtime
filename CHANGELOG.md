@@ -38,6 +38,13 @@ contract.
 
 ### Fixed
 
+- Signature and provenance verification runs in a checkout whose `.git` is a
+  pointer file. `internal/signatureverify` required `.git` to be a directory, so
+  a submodule or a linked worktree — the checkouts `docs/releasing.md` step 3
+  tells a maintainer to verify from — failed with `not a directory` before
+  reading a single Git object. The pointer's `gitdir:` target is now resolved and
+  held under the same no-follow, identity-bound discipline as the work tree, and
+  substituting the pointer after capture fails the run.
 - The quick start no longer instructs `go install ...@v0.1.0`. The repository has
   no tag and no GitHub release, so that command failed for every reader; it now
   installs from `@main` and says plainly that no version has been published.

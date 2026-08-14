@@ -180,15 +180,15 @@ type identityBoundRunner struct {
 	repository repositoryIdentity
 }
 
-func (bound identityBoundRunner) run(ctx context.Context, path string, args []string, directory string, environment []string) ([]byte, []byte, error) {
+func (bound identityBoundRunner) run(ctx context.Context, args []string, directory string, environment []string) ([]byte, []byte, error) {
 	if err := bound.repository.revalidate(); err != nil {
 		return nil, nil, err
 	}
 	explicitArgs := append([]string{
 		"--no-replace-objects",
-		"--git-dir=" + filepath.Join(bound.repository.root, ".git"),
+		"--git-dir=" + bound.repository.gitDirectory,
 		"--work-tree=" + bound.repository.root,
 	}, args...)
-	stdout, stderr, rootErr := bound.delegate.run(ctx, gitExecutable, explicitArgs, directory, environment)
+	stdout, stderr, rootErr := bound.delegate.run(ctx, explicitArgs, directory, environment)
 	return stdout, stderr, errors.Join(rootErr, bound.repository.revalidate())
 }

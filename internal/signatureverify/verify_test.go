@@ -368,7 +368,7 @@ type recordingRunner struct {
 	trackedTrust []byte
 }
 
-func (r *recordingRunner) run(_ context.Context, _ string, args []string, _ string, environment []string) ([]byte, []byte, error) {
+func (r *recordingRunner) run(_ context.Context, args []string, _ string, environment []string) ([]byte, []byte, error) {
 	r.calls = append(r.calls, recordedCall{append([]string(nil), args...), append([]string(nil), environment...)})
 	if len(r.calls) == r.failureAt {
 		return []byte("stdout evidence\n"), []byte("stderr evidence\n"), r.failure
