@@ -114,9 +114,10 @@ covers every other asset and deliberately does not checksum itself.
    [GO-2026-5972](https://pkg.go.dev/vuln/GO-2026-5972) in `encoding/asn1`, all
    of which the runtime reaches; Go 1.26.5 fixed
    [GO-2026-5856](https://pkg.go.dev/vuln/GO-2026-5856) before them. The
-   dependency closure pins CIRCL v1.6.3, whose
-   [official release](https://github.com/cloudflare/circl/releases/tag/v1.6.3)
-   fixes the P-384 defect tracked as GO-2026-4550.
+   dependency closure pins CIRCL v1.6.5; the P-384 defect tracked as
+   GO-2026-4550 was fixed in
+   [v1.6.3](https://github.com/cloudflare/circl/releases/tag/v1.6.3), which that
+   pin supersedes.
 7. Merge a signed PR only after exact-head CI and CodeQL are green. Recheck the
    post-merge `main` runs and reread this contract.
 8. Confirm repository immutable releases are enabled, no tag/release exists,
