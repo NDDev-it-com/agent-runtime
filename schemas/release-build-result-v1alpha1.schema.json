@@ -9,7 +9,7 @@
   "properties": {
     "schema_version": {"const": "v1alpha1"},
     "artifact_root": {"type": "string", "minLength": 1},
-    "version": {"const": "v0.1.0"},
+    "version": {"const": "v0.1.3"},
     "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "module_path": {"const": "github.com/NDDev-it-com/agent-runtime"},
     "license": {"const": "AGPL-3.0-only"},

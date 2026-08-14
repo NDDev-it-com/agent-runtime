@@ -82,12 +82,49 @@ func DecodeTaskManifest(r io.Reader) (TaskManifest, error) {
 	if err := ensureEOF(decoder); err != nil {
 		return TaskManifest{}, err
 	}
-	manifest.applyDefaults()
+	stated, err := statedBounds(data)
+	if err != nil {
+		return TaskManifest{}, err
+	}
+	manifest.applyDefaults(stated)
 	if err := manifest.Validate(); err != nil {
 		return TaskManifest{}, err
 	}
 	return manifest, nil
 }
+
+// statedBounds reports which bounds the document actually wrote. Go cannot tell
+// an omitted field from one set to its zero value, but JSON can, and the
+// difference matters: `"timeout": "0s"` asked for no execution time at all and
+// used to be granted the five-minute default instead, which is the widest
+// possible reading of the narrowest possible request. The same held for a zero
+// output or context budget, each of which quietly became a mebibyte. A negative
+// value was already refused, so zero was the one way to fail open.
+func statedBounds(document []byte) (statedFields, error) {
+	var stated struct {
+		Timeout    *Duration `json:"timeout"`
+		MaxOutput  *int64    `json:"max_output_bytes"`
+		MaxContext *int64    `json:"max_context_bytes"`
+	}
+	// Unknown fields are already refused by the decode above; this pass reads
+	// only presence, so it must not reject the rest of the document.
+	if err := json.Unmarshal(document, &stated); err != nil {
+		return statedFields{}, fmt.Errorf("decode task manifest bounds: %w", err)
+	}
+	return statedFields{
+		timeout:    stated.Timeout != nil,
+		maxOutput:  stated.MaxOutput != nil,
+		maxContext: stated.MaxContext != nil,
+	}, nil
+}
+
+// statedFields records which bounds a document wrote, so a default is only ever
+// substituted for silence.
+type statedFields struct{ timeout, maxOutput, maxContext bool }
+
+// noneStated is the reading for a Go value, whose zero fields are silence
+// rather than a stated bound.
+var noneStated = statedFields{}
 
 func ensureEOF(decoder *json.Decoder) error {
 	var extra any
@@ -100,26 +137,33 @@ func ensureEOF(decoder *json.Decoder) error {
 	return nil
 }
 
-func (m *TaskManifest) applyDefaults() {
+// applyDefaults fills the bounds the caller left silent. A bound the caller
+// stated is never rewritten, so an explicit zero survives to Validate and is
+// refused there rather than being widened into a default.
+func (m *TaskManifest) applyDefaults(stated statedFields) {
 	if m.Workdir == "" {
 		m.Workdir = "."
 	}
-	if m.Timeout.Duration == 0 {
+	if !stated.timeout && m.Timeout.Duration == 0 {
 		m.Timeout.Duration = DefaultTimeout
 	}
-	if m.MaxOutput == 0 {
+	if !stated.maxOutput && m.MaxOutput == 0 {
 		m.MaxOutput = DefaultMaxOutputBytes
 	}
-	if m.MaxContext == 0 {
+	if !stated.maxContext && m.MaxContext == 0 {
 		m.MaxContext = DefaultMaxContextBytes
 	}
 }
 
-// Prepare returns a validated copy with runtime defaults applied. It is useful
-// to observers that must distinguish validation from execution without
-// mutating the caller's manifest.
+// Prepare returns a validated copy with runtime defaults applied to the bounds
+// left at their zero value. It is useful to observers that must distinguish
+// validation from execution without mutating the caller's manifest.
+//
+// A Go struct literal carries no record of which fields it omitted, so every
+// zero here is read as silence. A document that states a bound explicitly is
+// held to it by DecodeTaskManifest instead.
 func (m TaskManifest) Prepare() (TaskManifest, error) {
-	m.applyDefaults()
+	m.applyDefaults(noneStated)
 	if err := m.Validate(); err != nil {
 		return TaskManifest{}, err
 	}

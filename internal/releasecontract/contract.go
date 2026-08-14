@@ -41,11 +41,13 @@ const (
 var (
 	versionPattern = regexp.MustCompile(`^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 	actionPattern  = regexp.MustCompile(`^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+@[0-9a-f]{40}$`)
+	commitPattern  = regexp.MustCompile(`^[0-9a-f]{40}$`)
 	// permittedDependencyLicenses is a closed allowlist rather than a single
 	// constant, because the closure is no longer uniformly BSD. It stays closed
 	// so a dependency arriving under an unreviewed licence fails the contract
 	// instead of being recorded as whatever its go.mod happened to say.
 	permittedDependencyLicenses = map[string]bool{
+		"Apache-2.0":   true,
 		"BSD-3-Clause": true,
 		"MIT":          true,
 	}
@@ -58,13 +60,20 @@ type Contract struct {
 	GoCompatibility string       `json:"go_compatibility"`
 	License         string       `json:"license"`
 	Dependencies    []Dependency `json:"dependencies"`
-	SourceCommit    string       `json:"source_commit"`
-	ArchivePrefix   string       `json:"archive_prefix"`
-	Workflow        string       `json:"workflow"`
-	AllowedSigners  string       `json:"allowed_signers"`
-	Assets          Assets       `json:"assets"`
-	Limits          Limits       `json:"limits"`
-	Actions         Actions      `json:"actions"`
+	// GraphOnlyModules are pinned in go.sum but provide no package to any
+	// build or test of this module. They exist because a dependency's own
+	// go.mod names them, so their checksums are part of the verified module
+	// graph while their code never runs here. Listing them separately keeps
+	// both closures exact: conflating the two forced a test-only module of a
+	// dependency to be recorded as if this module depended on it.
+	GraphOnlyModules []Dependency `json:"graph_only_modules,omitempty"`
+	SourceCommit     string       `json:"source_commit"`
+	ArchivePrefix    string       `json:"archive_prefix"`
+	Workflow         string       `json:"workflow"`
+	AllowedSigners   string       `json:"allowed_signers"`
+	Assets           Assets       `json:"assets"`
+	Limits           Limits       `json:"limits"`
+	Actions          Actions      `json:"actions"`
 }
 
 type Assets struct {
@@ -145,6 +154,20 @@ func (c Contract) Validate() error {
 	}
 	if !equalDependencies(c.Dependencies, canonicalDependencies(c.Dependencies)) {
 		return errors.New("release dependencies must use canonical module-path order")
+	}
+	if len(c.GraphOnlyModules) > 64 {
+		return errors.New("release graph-only module closure is unbounded")
+	}
+	for _, pinned := range c.GraphOnlyModules {
+		if module.CheckPath(pinned.ModulePath) != nil || module.CanonicalVersion(pinned.Version) != pinned.Version || !permittedDependencyLicenses[pinned.License] {
+			return errors.New("release graph-only module identity, version, or license is invalid")
+		}
+		if _, built := seenDependencies[pinned.ModulePath]; built {
+			return fmt.Errorf("module %q is listed as both a dependency and graph-only", pinned.ModulePath)
+		}
+	}
+	if !equalDependencies(c.GraphOnlyModules, canonicalDependencies(c.GraphOnlyModules)) {
+		return errors.New("release graph-only modules must use canonical module-path order")
 	}
 	wantPrefix := "agent-runtime-" + c.Version + "/"
 	if c.ArchivePrefix != wantPrefix {
@@ -271,9 +294,12 @@ func sameGoCompatibility(actual, expected string) bool {
 
 func (c Contract) verifyGoSum(data []byte) error {
 	lines := strings.Split(strings.TrimSuffix(string(data), "\n"), "\n")
-	want := make([]string, 0, len(c.Dependencies)*2)
-	for _, dependency := range c.Dependencies {
-		want = append(want, dependency.ModulePath+" "+dependency.Version, dependency.ModulePath+" "+dependency.Version+"/go.mod")
+	// go.sum spans the verified module graph, which is a superset of the build
+	// closure: a dependency's own requirements are pinned even when nothing
+	// here compiles them.
+	want := make([]string, 0, (len(c.Dependencies)+len(c.GraphOnlyModules))*2)
+	for _, pinned := range append(append([]Dependency{}, c.Dependencies...), c.GraphOnlyModules...) {
+		want = append(want, pinned.ModulePath+" "+pinned.Version, pinned.ModulePath+" "+pinned.Version+"/go.mod")
 	}
 	sort.Strings(want)
 	if len(lines) != len(want) {
@@ -335,6 +361,9 @@ func (c Contract) VerifyWorkflow(data []byte) error {
 		`release_parent="$(mktemp -d)"`, `release_dist="${release_parent}/release-dist"`,
 		`release_result="${release_parent}/build-result.json"`, `--out "$release_dist"`,
 		`--result "$release_result"`, `--verify-result "$release_result"`,
+		// The receipt is only proof if the commit it is checked against comes
+		// from the checkout rather than from the receipt itself.
+		`--expect-commit "$release_commit"`, `release_commit="$(git rev-parse "${GITHUB_REF_NAME}^{commit}")"`,
 		`RELEASE_DIST=$release_dist`,
 	} {
 		if job.CountRunOccurrences(command) == 0 {

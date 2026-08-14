@@ -1,0 +1,129 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 8,
+  "goal": {
+    "id": "release-proof-chain",
+    "intent": "Release receipts and published schemas prove source identity against an independent source",
+    "acceptance": [
+      {
+        "id": "independent-commit",
+        "acceptance": "ValidateBuildResult receives an independently resolved expected commit bound to checkout, tag and manifest",
+        "status": "pending"
+      },
+      {
+        "id": "receipt-mutation-dies",
+        "acceptance": "A receipt whose source_commit is replaced fails verification",
+        "status": "pending"
+      },
+      {
+        "id": "schema-truth",
+        "acceptance": "Build-result version const, untyped pattern fields and governance required_checks item shape are correct",
+        "status": "pending"
+      },
+      {
+        "id": "bidirectional-parity",
+        "acceptance": "A real draft-2020-12 validator proves schema and Go accept and reject the same documents",
+        "status": "pending"
+      },
+      {
+        "id": "honest-docs",
+        "acceptance": "The release guide states only gates that exist",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Rewrite the v0.1.3 tag, assets or sealed changelog section",
+      "Grant the publishing job admin read"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Verified the new version pin actually fails: reintroducing the exact historical drift by setting the build-result schema back to v0.1.0 turns the parity test red with the reason named.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "temporary reversion of schemas/release-build-result-v1alpha1.schema.json",
+            "result": "release build result schema pins version v0.1.0, contract is v0.1.3 -- the check fails for the reason it claims."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:25:56.552154284Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Added ResolveCommit and an --expect-commit flag, bound the release workflow to the tag's commit, corrected the build-result version const, typed five patterns, gave required_checks both producer shapes as a oneOf, and added executed schema validation plus bidirectional Task manifest mutation parity.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestBuildResultCannotAttestItsOwnSourceCommit; TestTrackedDocumentsSatisfyTheirPublishedSchema; TestSchemaAndGoRejectTheSameDocuments",
+            "result": "The forged receipt is refused, including when it is offered as its own expectation; every tracked document validates; nine manifest mutations are rejected by both validators."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:25:56.429805028Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Thread an independently resolved commit through verification and the CLI, bind it to the tag and the manifest, correct the schemas, and replace constant sampling with a real draft-2020-12 validator run over documents this repository actually produces.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "schema_parity_test.go",
+            "result": "The previous parity test compared selected constants and the build-result version was not among them, which is why the drift survived three releases."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:25:56.391708916Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "ValidateBuildResult rejected only an empty source_commit and then derived the expected receipt by passing the candidate's own value into newBuildResult, so the expected identity came from the object under verification. Separately the build-result schema required v0.1.0 while the producer emitted v0.1.3, five pattern keywords lacked a type, governance required_checks had no item shape, and the release guide claimed an immutable-releases check the workflow explicitly refuses to perform.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "check-release-contract --verify-result on a receipt whose source_commit was replaced with 0123456789abcdef0123456789abcdef01234567",
+            "result": "Reported 'release build result valid' and exited 0 with every asset and digest untouched."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:25:56.351139489Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "The real validator immediately surfaced two divergences the sampling test could not: Go accepted a zero output or context budget the schema refused, and the tracked first-release journal violates the goal schema. The first is the same fail-open defect and was fixed here rather than deferred, since a parity test that skips its own failures is worthless. The second belongs to the journal repair and is scoped there.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestStatedBoundsAreNotWidened",
+            "result": "Stated zero and negative bounds are refused; silence still defaults; a Go literal's zero field still defaults because the language records no presence."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:25:56.468345681Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "Adding the validator dependency exposed a modelling defect in the contract itself: go.sum spans the verified module graph while dependencies describes the build closure, and asserting they were identical would have forced a dependency's test-only module to be recorded as a dependency of this module. Modelled graph_only_modules explicitly instead of relaxing the closure check.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "TestGraphOnlyModulesAreProvenNotAssumed",
+            "result": "A declared graph-only pin is accepted, an undeclared module in go.sum is still refused, and a module claimed as both is rejected."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:25:56.511535697Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "gofmt, go vet, staticcheck v0.7.0, full tests under umask 002, race, all six contract checkers, and a deterministic double release build verified and compared byte for byte.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local gate transcript 2026-08-15",
+            "result": "All green."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:25:56.590045136Z"
+      }
+    },
+    "created_at": "2026-08-14T23:25:56.314773629Z",
+    "updated_at": "2026-08-14T23:25:56.590045136Z"
+  }
+}

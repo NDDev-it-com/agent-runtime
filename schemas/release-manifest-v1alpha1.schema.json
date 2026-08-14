@@ -8,14 +8,14 @@
   "required": ["schema_version", "version", "source_tag", "source_commit", "source_commit_time", "module_path", "go_compatibility", "license", "dependencies", "workflow", "actions", "sbom_namespace", "content_assets", "required_assets"],
   "properties": {
     "schema_version": {"const": "v1alpha1"},
-    "version": {"pattern": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
+    "version": {"type": "string", "pattern": "^v(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)$"},
     "source_tag": {"type": "string"},
-    "source_commit": {"pattern": "^[0-9a-f]{40}$"},
+    "source_commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
     "source_commit_time": {"type": "string", "format": "date-time"},
     "module_path": {"type": "string"},
     "go_compatibility": {"type": "string"},
     "license": {"const": "AGPL-3.0-only"},
-    "dependencies": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"enum": ["github.com/ProtonMail/go-crypto", "github.com/cloudflare/circl", "golang.org/x/crypto", "golang.org/x/mod", "golang.org/x/sys"]}, "version": {"pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"}, "license": {"const": "BSD-3-Clause"}, "indirect": {"type": "boolean"}}}},
+    "dependencies": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"enum": ["github.com/ProtonMail/go-crypto", "github.com/cloudflare/circl", "golang.org/x/crypto", "golang.org/x/mod", "golang.org/x/sys"]}, "version": {"type": "string", "pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"}, "license": {"const": "BSD-3-Clause"}, "indirect": {"type": "boolean"}}}},
     "workflow": {"type": "string"},
     "actions": {"type": "object", "additionalProperties": false, "required": ["checkout", "setup_go", "attest_provenance", "attest_sbom"], "properties": {"checkout": {"type": "string"}, "setup_go": {"type": "string"}, "attest_provenance": {"type": "string"}, "attest_sbom": {"type": "string"}}},
     "sbom_namespace": {"type": "string", "format": "uri"},
@@ -30,7 +30,7 @@
         "properties": {
           "name": {"type": "string"},
           "size": {"type": "integer", "minimum": 1},
-          "sha256": {"pattern": "^[0-9a-f]{64}$"}
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
         }
       }
     },

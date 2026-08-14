@@ -42,19 +42,28 @@ func TestSchemaAndLicenseParity(t *testing.T) {
 	if buildResultProperties["license"].(map[string]any)["const"] != releasepkg.CanonicalLicense || buildResultProperties["schema_version"].(map[string]any)["const"] != releasepkg.BuildResultSchemaVersion {
 		t.Fatal("release build result license/schema identity drift")
 	}
+	// The release version is restated in five places and this was the one
+	// nothing compared, so the build-result schema sat at v0.1.0 while the
+	// producer emitted v0.1.3 and every test stayed green. Both release schemas
+	// are pinned to the contract here so neither can drift alone again.
+	contract, err := releasepkg.Load("release/v1alpha1.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, schema := range map[string]map[string]any{"release contract": releaseContract, "release build result": releaseBuildResult} {
+		if got := schema["properties"].(map[string]any)["version"].(map[string]any)["const"]; got != contract.Version {
+			t.Errorf("%s schema pins version %v, contract is %s", name, got, contract.Version)
+		}
+	}
 	if provenance["properties"].(map[string]any)["integration_openpgp_status"].(map[string]any)["const"] != "active" || provenance["properties"].(map[string]any)["trust_update_policy"].(map[string]any)["const"] != "reviewed-contract-change" {
 		t.Fatal("provenance trust policy schema drift")
 	}
 	if fuzz["properties"].(map[string]any)["fuzztime"].(map[string]any)["const"] != "100x" || fuzz["properties"].(map[string]any)["parallel"].(map[string]any)["const"] != float64(1) {
 		t.Fatal("fuzz execution bounds schema drift")
 	}
-	release, err := releasepkg.Load("release/v1alpha1.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	wantDependencyPaths := make([]string, len(release.Dependencies))
-	for index := range release.Dependencies {
-		wantDependencyPaths[index] = release.Dependencies[index].ModulePath
+	wantDependencyPaths := make([]string, len(contract.Dependencies))
+	for index := range contract.Dependencies {
+		wantDependencyPaths[index] = contract.Dependencies[index].ModulePath
 	}
 	sort.Strings(wantDependencyPaths)
 	dependencyItems := releaseContract["properties"].(map[string]any)["dependencies"].(map[string]any)["items"].(map[string]any)
