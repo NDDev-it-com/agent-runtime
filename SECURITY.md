@@ -19,10 +19,12 @@ sources. Workspace path confinement protects instruction selection; it does not
 confine the process that is launched. Environment allowlisting reduces accidental
 credential inheritance but is not sufficient isolation. It also does not govern
 which executable is selected: a bare command name is resolved against the
-caller's `PATH` before the child environment is applied, so the host, not the
-manifest, decides which binary runs. `Result.executable_path` records the file
-that ran, so the choice is auditable after the fact. Pass an absolute path where
-the manifest must decide.
+`PATH` the runtime reads through `Runner.LookupEnv`, the same source that
+supplies the allowlisted values, so an embedder controls which executable runs
+rather than inheriting whatever the host offers. The default reads the process
+environment, so a CLI invocation still resolves against the caller's `PATH`;
+pass an absolute path, or supply `LookupEnv`, where that must be decided by the
+caller. `Result.executable_path` records the file that ran.
 Use an external sandbox for untrusted code and provide only short-lived,
 least-privilege credentials.
 

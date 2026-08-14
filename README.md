@@ -190,12 +190,14 @@ leave the workspace. Child processes receive only environment variables named
 by the manifest. Context and captured output are bounded, and cancellation or a
 timeout terminates the direct child process.
 
-A bare command name is still resolved through the *caller's* `PATH`, not the
-manifest's, so the manifest does not decide which binary runs. The choice is at
-least recorded: `Result.executable_path` carries the file that actually ran, and
-is empty when the name could not be resolved. Give an absolute path when the
-manifest must decide
-([issue #46](https://github.com/NDDev-it-com/agent-runtime/issues/46)).
+A bare command name is resolved against the `PATH` the runtime reads through
+`Runner.LookupEnv` — the same source that supplies the values named by the
+manifest allowlist — so resolution and the child environment come from one
+place. An embedder that supplies `LookupEnv` therefore decides which executable
+runs; the default reads the process environment, so the CLI still resolves
+against the caller's `PATH`. Empty and relative `PATH` entries are skipped
+because they resolve against the runtime's working directory rather than the
+Task's. `Result.executable_path` records the file that ran.
 
 These controls are not a sandbox. A trusted command can still access files,
 processes, credentials, and networks available to its operating-system identity;

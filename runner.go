@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -40,6 +41,11 @@ var errTaskTimeout = errors.New("task timeout exceeded")
 
 type Runner struct {
 	Workspace Workspace
+	// LookupEnv is the single source of environment values this Runner reads.
+	// It supplies the values named by the manifest allowlist and the PATH the
+	// command name is resolved against, so an embedder that sets it decides
+	// both what the child sees and which executable runs. Defaults to
+	// os.LookupEnv.
 	LookupEnv func(string) (string, bool)
 }
 
@@ -65,7 +71,10 @@ func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) 
 		lookup = os.LookupEnv
 	}
 
-	executable, resolved := resolveExecutable(manifest.Command[0])
+	executable, err := resolveExecutable(manifest.Command[0], lookup)
+	if err != nil {
+		return Result{AgentID: manifest.ID, ExitCode: -1}, fmt.Errorf("resolve command for Task %q: %w", manifest.ID, err)
+	}
 
 	runCtx, cancel := context.WithTimeoutCause(ctx, manifest.Timeout.Duration, errTaskTimeout)
 	defer cancel()
@@ -80,7 +89,7 @@ func (r Runner) Run(ctx context.Context, manifest TaskManifest) (Result, error) 
 	err = cmd.Run()
 	cause := context.Cause(runCtx)
 	terminated := err != nil && cause != nil
-	result := Result{AgentID: manifest.ID, ExecutablePath: resolved, DurationMS: time.Since(started).Milliseconds(), Output: output.String(), Truncated: output.truncated}
+	result := Result{AgentID: manifest.ID, ExecutablePath: executable, DurationMS: time.Since(started).Milliseconds(), Output: output.String(), Truncated: output.truncated}
 	result.TimedOut = terminated && errors.Is(cause, errTaskTimeout)
 	result.Cancelled = terminated && !result.TimedOut
 	if err == nil {
@@ -128,25 +137,32 @@ func accepted(criteria TaskAcceptance, result Result) bool {
 	return true
 }
 
-// resolveExecutable reports the file a bare command name resolves to, and the
-// argument exec should be given. Resolution happens once, here, so the run can
-// record what it chose; exec.Command would otherwise resolve the same name
-// invisibly and discard the answer.
+// resolveExecutable reports the file a command name refers to, resolved against
+// the PATH this Runner reads through LookupEnv rather than the one exec.Command
+// would read from the process. Resolution and the child environment then come
+// from one source, so an embedder that supplies LookupEnv gets a deterministic
+// answer instead of one the host decides.
 //
-// A name containing a separator is a path already and is passed through
-// untouched. A bare name that resolves is replaced by its absolute path, which
-// is what exec would have executed anyway. A bare name that does not resolve is
-// passed through so the failure is produced by exec, with the same message as
-// before.
-func resolveExecutable(name string) (argument, resolved string) {
+// A name containing a separator is a path already and is returned untouched.
+// Empty and relative PATH entries are skipped: both resolve against the
+// runtime's working directory, which is not the Task's workdir and is exactly
+// the ambient state this resolution exists to remove.
+func resolveExecutable(name string, lookup func(string) (string, bool)) (string, error) {
 	if strings.ContainsRune(name, os.PathSeparator) {
-		return name, name
+		return name, nil
 	}
-	path, err := exec.LookPath(name)
-	if err != nil {
-		return name, ""
+	search, _ := lookup("PATH")
+	for _, directory := range filepath.SplitList(search) {
+		if directory == "" || !filepath.IsAbs(directory) {
+			continue
+		}
+		candidate := filepath.Join(directory, name)
+		info, statErr := os.Stat(candidate)
+		if statErr == nil && info.Mode().IsRegular() && info.Mode().Perm()&0o111 != 0 {
+			return candidate, nil
+		}
 	}
-	return path, path
+	return "", fmt.Errorf("%q: executable file not found in $PATH", name)
 }
 
 func selectedEnvironment(names []string, lookup func(string) (string, bool)) []string {

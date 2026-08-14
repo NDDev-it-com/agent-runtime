@@ -25,6 +25,15 @@ contract.
 
 ### Fixed
 
+- Command resolution follows `Runner.LookupEnv`. That field is the Runner's
+  single source of environment values, but a bare command name was resolved by
+  `exec.Command` against the *process* `PATH`, so an embedder that supplied a
+  `PATH` containing no executable still ran one the host provided. Resolution
+  now uses the same source as the allowlisted values, and fails before starting
+  anything when the name is not found there. Empty and relative `PATH` entries
+  are skipped, because both resolve against the runtime's working directory
+  rather than the Task's. The default remains `os.LookupEnv`, so CLI behaviour
+  is unchanged.
 - `check-provenance --integration` no longer fails on a timestamp race. It
   required GitHub's `verified_at` to be at or after the pull request's
   `merged_at`, but `verified_at` records when GitHub *computed* the
