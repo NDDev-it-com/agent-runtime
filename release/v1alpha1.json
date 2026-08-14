@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "version": "v0.1.2",
+  "version": "v0.1.3",
   "module_path": "github.com/NDDev-it-com/agent-runtime",
   "go_compatibility": "1.25",
   "license": "AGPL-3.0-only",
@@ -12,14 +12,14 @@
     {"module_path": "golang.org/x/sys", "version": "v0.47.0", "license": "BSD-3-Clause"}
   ],
   "source_commit": "HEAD",
-  "archive_prefix": "agent-runtime-v0.1.2/",
+  "archive_prefix": "agent-runtime-v0.1.3/",
   "workflow": ".github/workflows/release.yml",
   "allowed_signers": ".github/release-allowed-signers",
   "assets": {
-    "archive": "agent-runtime-v0.1.2-source.tar.gz",
-    "sbom": "agent-runtime-v0.1.2.spdx.json",
-    "notes": "release-notes-v0.1.2.md",
-    "manifest": "release-manifest-v0.1.2.json",
+    "archive": "agent-runtime-v0.1.3-source.tar.gz",
+    "sbom": "agent-runtime-v0.1.3.spdx.json",
+    "notes": "release-notes-v0.1.3.md",
+    "manifest": "release-manifest-v0.1.3.json",
     "checksums": "SHA256SUMS"
   },
   "limits": {
