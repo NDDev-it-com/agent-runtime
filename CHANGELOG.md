@@ -6,8 +6,42 @@ contract.
 
 ## [Unreleased]
 
+## [0.1.0] - 2026-08-14
+
 ### Added
 
+- Strict `v1alpha1` JSON Task manifest and validation API.
+- Durable `v1alpha1` Goal journal with an eight-phase state machine, living
+  acceptance checklist, typed receipts, atomic updates, and guarded closure.
+- Workspace and symlink-confined instruction context assembly.
+- Environment allowlisting, timeout, cancellation, and bounded output capture.
+- Embeddable Go runner and `validate`, `run`, and `version` CLI commands.
+- Race-tested unit, integration, fuzz-seed, CI, security, and public project
+  documentation foundations.
+- GNU AGPL-3.0-only licensing with source, schema, and documentation parity
+  checks against the canonical sibling license text when available.
+- Checked CI security-tool contract that pins every external tool by module path
+  and version, and holds the compatibility lane to the linter's own minimum Go
+  while running the vulnerability scanner under its required patched toolchain.
+- Versioned, fail-closed repository governance contract and validator for
+  PR-only main changes, strict exact CI/CodeQL checks, zero approvals, and
+  auto-merge-compatible settings.
+- Provider-neutral immutable `v1alpha1` lifecycle envelopes for Task, Goal, and
+  Brain/Orchestrator/Dispatcher/Worker handoff observations.
+- Fail-closed typed redaction with nested structure, cycle, formatter, unsafe
+  value, Unicode/binary, depth, collection, string, attribute, stream, envelope,
+  replay, and file bounds.
+- Composable synchronous sinks, bounded memory and durable JSONL implementations,
+  delivery reports, retry/idempotency/replay semantics, and Task/Goal adapters.
+- Event JSON Schema, documentation, and deep race/fuzz/leak/restart/concurrency/
+  failure tests.
+- Deterministic source/module release contract with SPDX JSON, checksums,
+  machine-readable manifest, signed tags and keyless artifact attestations.
+- Hermetic three-role provenance verification for owner SSH source commits,
+  GitHub OpenPGP integration commits and owner SSH release tags, with pinned
+  reviewed public trust and exact PR/check graph binding.
+- Patched security scanning on Go 1.26.6 with a dependency closure at CIRCL
+  v1.6.5, separate from the Go 1.25 module, test and release compatibility lane.
 - Pinned `staticcheck` runs in the `test` job and is declared in
   `security-tools.json` alongside the vulnerability scanner. `check-ci-contract`
   verifies the pin is exact, is invoked only from that lane, and that the
@@ -22,6 +56,8 @@ contract.
 
 ### Changed
 
+- Task manifests expose additive `Prepare` validation so observers distinguish
+  validation failure from execution without changing Runner behavior.
 - The published minimum is now Go 1.25. Go 1.24 has no patched release for the
   four reachable standard-library defects `govulncheck` reports — they are fixed
   only in 1.25.13, 1.26.6 and 1.27.0-rc.3 — so the test lane was running an
@@ -172,47 +208,6 @@ contract.
   [GO-2026-5972](https://pkg.go.dev/vuln/GO-2026-5972) in `encoding/asn1` — none
   of which existed in the database when the lane was pinned. All three are fixed
   in 1.26.6, and the scan is clean on it.
-
-## [0.1.0] - 2026-08-13
-
-### Added
-
-- Strict `v1alpha1` JSON Task manifest and validation API.
-- Durable `v1alpha1` Goal journal with an eight-phase state machine, living
-  acceptance checklist, typed receipts, atomic updates, and guarded closure.
-- Workspace and symlink-confined instruction context assembly.
-- Environment allowlisting, timeout, cancellation, and bounded output capture.
-- Embeddable Go runner and `validate`, `run`, and `version` CLI commands.
-- Race-tested unit, integration, fuzz-seed, CI, security, and public project
-  documentation foundations.
-- GNU AGPL-3.0-only licensing with source, schema, and documentation parity
-  checks against the canonical sibling license text when available.
-- Checked CI security-tool contract that preserves Go 1.24 library compatibility
-  while running pinned `govulncheck` v1.6.0 under its required Go 1.25 toolchain.
-- Versioned, fail-closed repository governance contract and validator for
-  PR-only main changes, strict exact CI/CodeQL checks, zero approvals, and
-  auto-merge-compatible settings.
-- Provider-neutral immutable `v1alpha1` lifecycle envelopes for Task, Goal, and
-  Brain/Orchestrator/Dispatcher/Worker handoff observations.
-- Fail-closed typed redaction with nested structure, cycle, formatter, unsafe
-  value, Unicode/binary, depth, collection, string, attribute, stream, envelope,
-  replay, and file bounds.
-- Composable synchronous sinks, bounded memory and durable JSONL implementations,
-  delivery reports, retry/idempotency/replay semantics, and Task/Goal adapters.
-- Event JSON Schema, documentation, and deep race/fuzz/leak/restart/concurrency/
-  failure tests.
-- Deterministic source/module release contract with SPDX JSON, checksums,
-  machine-readable manifest, signed tags and keyless artifact attestations.
-- Hermetic three-role provenance verification for owner SSH source commits,
-  GitHub OpenPGP integration commits and owner SSH release tags, with pinned
-  reviewed public trust and exact PR/check graph binding.
-- Patched Go 1.26.5 security scanning and CIRCL v1.6.3 dependency closure while
-  retaining Go 1.24 module, test and release compatibility.
-
-### Changed
-
-- Task manifests expose additive `Prepare` validation so observers distinguish
-  validation failure from execution without changing Runner behavior.
 
 [Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.0
