@@ -6,6 +6,8 @@ contract.
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-08-14
+
 ### Changed
 
 - `Result.executable_path` records the file a run actually executed. A bare
@@ -275,7 +277,8 @@ Go module proxy entry for `v0.1.0` are immutable, so the tag is left in place an
 the first published release is `v0.1.1`. Everything listed under `[0.1.1]` was
 already present at this tag; only the release lane differs.
 
-[Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.3
 [0.1.2]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.2
 [0.1.1]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.1 (tag only; no release)
 [0.1.0]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.0 (tag only; no release)
