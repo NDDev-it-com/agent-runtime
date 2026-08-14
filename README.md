@@ -139,6 +139,9 @@ agent-runtime goal status --journal goal.json
 Mutations require the expected journal revision, use an exclusive file lock,
 write a synced temporary file, and atomically replace the journal. Loading the
 journal restores the full checklist and evidence after restart or compaction.
+Goal identity, sealed receipts and recorded acceptance history are immutable:
+the store validates the transition itself, so no mutation can rewrite what a
+prior phase reported.
 The canonical distributable schema is
 [`schemas/goal-journal-v1alpha1.schema.json`](schemas/goal-journal-v1alpha1.schema.json).
 

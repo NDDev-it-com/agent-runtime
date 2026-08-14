@@ -44,6 +44,18 @@ whole prior state, requires an optimistic revision, holds an exclusive lock,
 increments the revision, syncs a temporary file, atomically renames it, and
 syncs the directory. A completed Goal is immutable.
 
+Structural validity is necessary but not sufficient for a durable journal, so
+the store also owns the history. `Create` accepts only a genesis journal:
+revision one, the first phase, no receipts, no recorded acceptance evidence.
+`Update` snapshots the loaded journal, applies the caller's mutation, and then
+requires the result to be a legitimate successor — identity and non-goals are
+fixed, the phase advances by at most one, sealed receipt summaries, timestamps
+and closures cannot change, and receipt and acceptance evidence is append-only.
+A caller-supplied mutation therefore cannot produce a structurally valid but
+historically false journal. `Journal.Clone` exists because a `Journal` value
+shares its receipts map and evidence slices; any before/after comparison must
+clone rather than assign.
+
 The file lock uses the platform `flock` API available on the supported macOS
 and Linux targets. Windows support requires a separate locking implementation
 and is not claimed by v0.

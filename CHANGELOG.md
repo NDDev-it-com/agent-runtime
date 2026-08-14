@@ -11,6 +11,13 @@ contract.
 - `Result.Cancelled` distinguishes a caller-ended run from a Task that exceeded
   its own timeout.
 
+### Changed
+
+- `goal.Phases` is now the function `goal.Phases()` returning a copy, so the
+  canonical phase order can no longer be reordered for the whole process.
+- `Journal.CompleteItem` appends acceptance evidence instead of replacing it,
+  matching the append-only semantics receipts already had.
+
 ### Fixed
 
 - A caller deadline is no longer reported as a Task timeout. Both surface as
@@ -27,6 +34,27 @@ contract.
   into memory in full before the limit was compared, and the comparison omitted
   the newline the assembler appends, so the result could exceed the declared
   limit by one byte.
+- A completed Goal is immutable through every mutator. `AddReceiptEvidence` was
+  missing the state guard its three siblings already had.
+- `Store.Update` now validates the semantic transition, not only the resulting
+  shape. A caller-supplied mutation can no longer rewrite goal identity, sealed
+  receipt summaries, recorded timestamps, prior evidence, acceptance criteria or
+  completion status while remaining structurally valid.
+- `Store.Create` accepts only a genesis journal, so a fabricated multi-receipt
+  history can no longer be persisted without performing a single transition.
+- Added `Journal.Clone`. A `Journal` value shares its receipts map and evidence
+  slices, so a "before" snapshot taken by assignment silently reflected later
+  mutations.
+
+### Security
+
+- Moved the pinned vulnerability-scanning lane from Go 1.26.5 to Go 1.26.6.
+  `govulncheck` began reporting three reachable standard-library defects against
+  1.26.5 — [GO-2026-6218](https://pkg.go.dev/vuln/GO-2026-6218) in `net/url`,
+  [GO-2026-6090](https://pkg.go.dev/vuln/GO-2026-6090) in `crypto/tls` and
+  [GO-2026-5972](https://pkg.go.dev/vuln/GO-2026-5972) in `encoding/asn1` — none
+  of which existed in the database when the lane was pinned. All three are fixed
+  in 1.26.6, and the scan is clean on it.
 
 ## [0.1.0] - 2026-08-13
 
