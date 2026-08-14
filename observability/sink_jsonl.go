@@ -45,19 +45,33 @@ func OpenJSONLSink(path string, options JSONLOptions) (*JSONLSink, error) {
 	if maxBytes < MaxEnvelopeBytes || maxBytes > MaximumMaxFileBytes {
 		return nil, &SinkError{Code: SinkFailure}
 	}
-	history, err := scanJSONL(path, maxBytes)
-	if err != nil {
-		return nil, err
-	}
-	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o600)
+	// One descriptor for the whole life of the sink. O_APPEND puts every write
+	// at the end regardless of where reading left the offset, so the history
+	// this sink trusts and the file it extends are the same object. Opening to
+	// scan and reopening to append let a rename between the two split them:
+	// duplicate-identity and size state would describe the file that was read
+	// while the writes went somewhere else.
+	file, err := os.OpenFile(path, os.O_CREATE|os.O_APPEND|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, &SinkError{Code: SinkUnavailable, Retryable: true}
 	}
-	info, statErr := os.Lstat(path)
 	openedInfo, openedErr := file.Stat()
-	if statErr != nil || openedErr != nil || !info.Mode().IsRegular() || info.Mode().Perm()&0o077 != 0 || !os.SameFile(info, openedInfo) {
+	if openedErr != nil || !openedInfo.Mode().IsRegular() || openedInfo.Mode().Perm()&0o077 != 0 {
 		_ = file.Close()
 		return nil, &SinkError{Code: SinkFailure}
+	}
+	// The name must still resolve to the object now held. A path that resolved
+	// elsewhere is refused rather than followed, because a caller configured a
+	// destination, not whatever currently answers to it.
+	named, namedErr := os.Lstat(path)
+	if namedErr != nil || !os.SameFile(named, openedInfo) {
+		_ = file.Close()
+		return nil, &SinkError{Code: SinkFailure}
+	}
+	history, err := readJSONLFile(file, maxBytes, nil)
+	if err != nil {
+		_ = file.Close()
+		return nil, err
 	}
 	return &JSONLSink{name: options.Name, file: file, syncEveryWrite: options.SyncEveryWrite, ids: history.ids, maxFileBytes: maxBytes, size: history.size}, nil
 }
@@ -156,11 +170,6 @@ type jsonlHistory struct {
 	size      int64
 }
 
-// scanJSONL validates an existing history without retaining its envelopes.
-func scanJSONL(path string, maxBytes int64) (jsonlHistory, error) {
-	return readJSONL(path, maxBytes, nil)
-}
-
 // readJSONL is the single definition of a valid JSONL history: canonical
 // single-line envelopes, a newline-terminated final record, unique event
 // identity, and a strictly increasing sequence within each subject stream. The
@@ -168,15 +177,24 @@ func scanJSONL(path string, maxBytes int64) (jsonlHistory, error) {
 // so one file can never be acceptable to append to yet impossible to replay.
 // When collect is non-nil every decoded envelope is appended to it in file order.
 func readJSONL(path string, maxBytes int64, collect *[]Envelope) (jsonlHistory, error) {
-	history := jsonlHistory{ids: map[string]bool{}, sequences: map[string]uint64{}}
 	file, err := os.Open(path)
 	if os.IsNotExist(err) {
-		return history, nil
+		return jsonlHistory{ids: map[string]bool{}, sequences: map[string]uint64{}}, nil
 	}
 	if err != nil {
 		return jsonlHistory{}, &SinkError{Code: SinkUnavailable, Retryable: true}
 	}
 	defer file.Close()
+	return readJSONLFile(file, maxBytes, collect)
+}
+
+// readJSONLFile reads the history of an already-open file. Taking the
+// descriptor rather than the path is what lets the sink validate and then
+// append to one object: reopening by name between the two left the recovered
+// identity and size describing the file that was read while every append went
+// to whatever the name resolved to afterwards.
+func readJSONLFile(file *os.File, maxBytes int64, collect *[]Envelope) (jsonlHistory, error) {
+	history := jsonlHistory{ids: map[string]bool{}, sequences: map[string]uint64{}}
 	info, err := file.Stat()
 	if err != nil {
 		return jsonlHistory{}, &SinkError{Code: SinkUnavailable, Retryable: true}
