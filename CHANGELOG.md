@@ -22,6 +22,18 @@ contract.
 
 ### Changed
 
+- The published minimum is now Go 1.25. Go 1.24 has no patched release for the
+  four reachable standard-library defects `govulncheck` reports — they are fixed
+  only in 1.25.13, 1.26.6 and 1.27.0-rc.3 — so the test lane was running an
+  unpatched toolchain. Every direct and pinned dependency has also moved its own
+  floor to Go 1.25, so the previous baseline could no longer take an update from
+  any of them. Changing it before the first release costs nothing: there are no
+  published versions, and a released `go` directive cannot be changed in place.
+- Every dependency and pinned tool is at its current release:
+  `golang.org/x/mod` v0.40.0, `golang.org/x/sys` v0.47.0, `golang.org/x/crypto`
+  v0.55.0, `github.com/cloudflare/circl` v1.6.5, `govulncheck` v1.7.0 and
+  `staticcheck` v0.7.0. `govulncheck` now reports 3 uncalled advisories in
+  required modules where it previously reported 22.
 - Evidence flags on `goal check`, `goal evidence` and `goal advance` are
   repeatable, so one command can record several evidence records. A single
   triple behaves exactly as before; an unequal count is rejected.

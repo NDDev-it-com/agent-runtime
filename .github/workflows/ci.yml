@@ -26,15 +26,15 @@ jobs:
           fetch-depth: 0
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
-          go-version: '1.24.x'
+          go-version: '1.25.x'
           cache: false
       - run: go test -race ./...
       - run: go vet ./...
       - name: Run pinned static analysis
         run: |
           set -euo pipefail
-          go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 -version
-          go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 ./...
+          go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 -version
+          go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
       - name: Run every contracted fuzz target independently
         run: go run ./cmd/check-fuzz
       - run: go build ./cmd/agent-runtime
@@ -85,9 +85,9 @@ jobs:
             echo "### Security toolchain"
             echo
             echo "- Go: \`$(go version)\`"
-            echo "- Scanner: \`golang.org/x/vuln/cmd/govulncheck@v1.6.0\`"
-            go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 -version
+            echo "- Scanner: \`golang.org/x/vuln/cmd/govulncheck@v1.7.0\`"
+            go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 -version
           } >>"${GITHUB_STEP_SUMMARY}"
       - run: go run ./cmd/check-ci-contract
       - run: go run ./cmd/check-release-contract
-      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.6.0 ./...
+      - run: go run golang.org/x/vuln/cmd/govulncheck@v1.7.0 ./...

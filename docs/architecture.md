@@ -65,8 +65,9 @@ and is not claimed by v0.
 `security-tools.json` is the source of truth for the pinned vulnerability
 scanner, its upstream-declared minimum Go version, and the production
 compatibility lane. `cmd/check-ci-contract` verifies the workflow projection.
-Negative tests reject a scanner lane below the upstream requirement and reject
-movement of the Go 1.24 compatibility lane. CI disables automatic toolchain
+Negative tests reject a scanner lane below the upstream requirement, a
+compatibility lane below the linter's own minimum, and any movement of the Go
+1.25 compatibility lane. CI disables automatic toolchain
 downloads with `GOTOOLCHAIN=local` and records both tool versions in the job
 summary.
 

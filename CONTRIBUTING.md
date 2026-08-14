@@ -3,13 +3,13 @@
 Open an issue before substantial changes so scope and compatibility can be
 agreed. Security reports must follow `SECURITY.md`.
 
-Development requires Go 1.24 or newer. Before submitting a pull request, run:
+Development requires Go 1.25 or newer. Before submitting a pull request, run:
 
 ```sh
 go test -race ./...
 go run ./cmd/check-fuzz
 go vet ./...
-go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 ./...
+go run honnef.co/go/tools/cmd/staticcheck@v0.7.0 ./...
 go build ./cmd/agent-runtime
 go run ./cmd/check-ci-contract
 ```

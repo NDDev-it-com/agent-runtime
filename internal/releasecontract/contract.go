@@ -26,6 +26,10 @@ import (
 const (
 	SchemaVersion    = "v1alpha1"
 	CanonicalLicense = "AGPL-3.0-only"
+	// CanonicalGoCompatibility is the minimum Go the published module declares.
+	// It is the one place the baseline is written in Go; release/v1alpha1.json,
+	// the release schema, security-tools.json and go.mod must agree with it.
+	CanonicalGoCompatibility = "1.25"
 )
 
 var (
@@ -106,8 +110,8 @@ func (c Contract) Validate() error {
 	if !versionPattern.MatchString(c.Version) {
 		return errors.New("version must be canonical vMAJOR.MINOR.PATCH")
 	}
-	if c.ModulePath != "github.com/NDDev-it-com/agent-runtime" || c.GoCompatibility != "1.24" || c.License != CanonicalLicense {
-		return errors.New("module path, Go 1.24 compatibility, and AGPL license are canonical")
+	if c.ModulePath != "github.com/NDDev-it-com/agent-runtime" || c.GoCompatibility != CanonicalGoCompatibility || c.License != CanonicalLicense {
+		return fmt.Errorf("module path, Go %s compatibility, and AGPL license are canonical", CanonicalGoCompatibility)
 	}
 	if len(c.Dependencies) == 0 || len(c.Dependencies) > 64 {
 		return errors.New("release dependency closure is empty or unbounded")

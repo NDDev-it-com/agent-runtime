@@ -37,7 +37,7 @@ func TestRejectsScannerToolchainBelowUpstreamMinimum(t *testing.T) {
 func TestRejectsCompatibilityLaneDrift(t *testing.T) {
 	t.Parallel()
 	c := testContract()
-	workflow := strings.Replace(testWorkflow("1.26.6"), "test:\n    go-version: '1.24.x'", "test:\n    go-version: '1.25.x'", 1)
+	workflow := strings.Replace(testWorkflow("1.26.6"), "test:\n    go-version: '1.25.x'", "test:\n    go-version: '1.26.x'", 1)
 	err := VerifyWorkflow(c, []byte(workflow))
 	if err == nil || !strings.Contains(err.Error(), "compatibility Go") {
 		t.Fatalf("error=%v", err)
@@ -102,16 +102,16 @@ func TestReleaseReproductionCommandOwnsOnlyParent(t *testing.T) {
 	}
 }
 func testContract() Contract {
-	return Contract{SchemaVersion: "v1alpha1", License: releasecontract.CanonicalLicense, Govulncheck: Tool{Module: "golang.org/x/vuln/cmd/govulncheck", Version: "v1.6.0", MinimumGo: "1.25.0", UpstreamGoMod: "https://github.com/golang/vuln/blob/v1.6.0/go.mod"}, Staticcheck: Tool{Module: "honnef.co/go/tools/cmd/staticcheck", Version: "v0.6.1", MinimumGo: "1.23", UpstreamGoMod: "https://github.com/dominikh/go-tools/blob/v0.6.1/go.mod"}, SecurityGo: "1.26.6", CompatibilityGo: "1.24"}
+	return Contract{SchemaVersion: "v1alpha1", License: releasecontract.CanonicalLicense, Govulncheck: Tool{Module: "golang.org/x/vuln/cmd/govulncheck", Version: "v1.7.0", MinimumGo: "1.25.0", UpstreamGoMod: "https://github.com/golang/vuln/blob/v1.7.0/go.mod"}, Staticcheck: Tool{Module: "honnef.co/go/tools/cmd/staticcheck", Version: "v0.7.0", MinimumGo: "1.25.0", UpstreamGoMod: "https://github.com/dominikh/go-tools/blob/v0.7.0/go.mod"}, SecurityGo: "1.26.6", CompatibilityGo: "1.25"}
 }
 func testWorkflow(scanner string) string {
-	return "env:\n  GOTOOLCHAIN: local\njobs:\n  test:\n    go-version: '1.24.x'\n    lint_version: honnef.co/go/tools/cmd/staticcheck@v0.6.1\n    lint: honnef.co/go/tools/cmd/staticcheck@v0.6.1\n    run: go run ./cmd/check-fuzz\n    reproduce: |\n      parent=\"$(mktemp -d)\"\n      first=\"$parent/first\"\n      second=\"$parent/second\"\n      first_result=\"$parent/first-result.json\"\n      second_result=\"$parent/second-result.json\"\n      go run ./cmd/check-release-contract --build --commit HEAD --out \"$first\" --result \"$first_result\"\n      go run ./cmd/check-release-contract --build --commit HEAD --out \"$second\" --result \"$second_result\"\n      go run ./cmd/check-release-contract --out \"$first\" --verify-result \"$first_result\"\n      go run ./cmd/check-release-contract --out \"$second\" --verify-result \"$second_result\"\n      diff -rq \"$first\" \"$second\"\n  govulncheck:\n    go-version: '" + scanner + "'\n    summary: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    version: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n    run: golang.org/x/vuln/cmd/govulncheck@v1.6.0\n"
+	return "env:\n  GOTOOLCHAIN: local\njobs:\n  test:\n    go-version: '1.25.x'\n    lint_version: honnef.co/go/tools/cmd/staticcheck@v0.7.0\n    lint: honnef.co/go/tools/cmd/staticcheck@v0.7.0\n    run: go run ./cmd/check-fuzz\n    reproduce: |\n      parent=\"$(mktemp -d)\"\n      first=\"$parent/first\"\n      second=\"$parent/second\"\n      first_result=\"$parent/first-result.json\"\n      second_result=\"$parent/second-result.json\"\n      go run ./cmd/check-release-contract --build --commit HEAD --out \"$first\" --result \"$first_result\"\n      go run ./cmd/check-release-contract --build --commit HEAD --out \"$second\" --result \"$second_result\"\n      go run ./cmd/check-release-contract --out \"$first\" --verify-result \"$first_result\"\n      go run ./cmd/check-release-contract --out \"$second\" --verify-result \"$second_result\"\n      diff -rq \"$first\" \"$second\"\n  govulncheck:\n    go-version: '" + scanner + "'\n    summary: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n    version: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n    run: golang.org/x/vuln/cmd/govulncheck@v1.7.0\n"
 }
 
 func TestRejectsCompatibilityLaneBelowLinterMinimum(t *testing.T) {
 	t.Parallel()
 	c := testContract()
-	c.Staticcheck.MinimumGo = "1.25.0"
+	c.Staticcheck.MinimumGo = "1.26.0"
 	err := VerifyWorkflow(c, []byte(testWorkflow("1.26.6")))
 	if err == nil || !strings.Contains(err.Error(), "below staticcheck minimum") {
 		t.Fatalf("error=%v", err)
@@ -120,7 +120,7 @@ func TestRejectsCompatibilityLaneBelowLinterMinimum(t *testing.T) {
 
 func TestRejectsUnpinnedOrMisplacedStaticAnalysis(t *testing.T) {
 	t.Parallel()
-	const pin = "honnef.co/go/tools/cmd/staticcheck@v0.6.1"
+	const pin = "honnef.co/go/tools/cmd/staticcheck@v0.7.0"
 	for name, test := range map[string]struct{ workflow, want string }{
 		"absent from the test job": {
 			strings.Replace(testWorkflow("1.26.6"), "    lint: "+pin+"\n", "", 1),
@@ -151,7 +151,7 @@ func TestRejectsContractMissingAToolPin(t *testing.T) {
 		t.Fatal(err)
 	}
 	for name, damaged := range map[string]string{
-		"no linter version": strings.Replace(string(data), `"version": "v0.6.1"`, `"version": ""`, 1),
+		"no linter version": strings.Replace(string(data), `"version": "v0.7.0"`, `"version": ""`, 1),
 		"no linter module":  strings.Replace(string(data), `"module": "honnef.co/go/tools/cmd/staticcheck"`, `"module": ""`, 1),
 	} {
 		t.Run(name, func(t *testing.T) {
