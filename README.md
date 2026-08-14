@@ -25,7 +25,7 @@ protocol, scheduler, or operating-system sandbox.
 
 ## Quick start
 
-Requires Go 1.24 or newer.
+Requires Go 1.25 or newer.
 
 No version has been published yet, so install from source:
 

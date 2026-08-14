@@ -3,16 +3,16 @@
   "license": "AGPL-3.0-only",
   "govulncheck": {
     "module": "golang.org/x/vuln/cmd/govulncheck",
-    "version": "v1.6.0",
+    "version": "v1.7.0",
     "minimum_go": "1.25.0",
-    "upstream_go_mod": "https://github.com/golang/vuln/blob/v1.6.0/go.mod"
+    "upstream_go_mod": "https://github.com/golang/vuln/blob/v1.7.0/go.mod"
   },
   "staticcheck": {
     "module": "honnef.co/go/tools/cmd/staticcheck",
-    "version": "v0.6.1",
-    "minimum_go": "1.23",
-    "upstream_go_mod": "https://github.com/dominikh/go-tools/blob/v0.6.1/go.mod"
+    "version": "v0.7.0",
+    "minimum_go": "1.25.0",
+    "upstream_go_mod": "https://github.com/dominikh/go-tools/blob/v0.7.0/go.mod"
   },
   "security_go": "1.26.6",
-  "compatibility_go": "1.24"
+  "compatibility_go": "1.25"
 }

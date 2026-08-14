@@ -34,7 +34,7 @@ func TestContractRejectsSemanticDrift(t *testing.T) {
 	t.Parallel()
 	mutations := []func(*Contract){
 		func(c *Contract) { c.SchemaVersion = "v2" }, func(c *Contract) { c.Version = "0.1.0" },
-		func(c *Contract) { c.ModulePath = "example.invalid/fork" }, func(c *Contract) { c.GoCompatibility = "1.25" }, func(c *Contract) { c.License = "MIT" },
+		func(c *Contract) { c.ModulePath = "example.invalid/fork" }, func(c *Contract) { c.GoCompatibility = "1.24" }, func(c *Contract) { c.License = "MIT" },
 		func(c *Contract) { c.Assets.Archive = "binary.zip" }, func(c *Contract) { c.Limits.MaxFiles = 0 },
 		func(c *Contract) { c.Dependencies = nil },
 		func(c *Contract) { c.Dependencies = append(c.Dependencies, c.Dependencies[0]) },
@@ -142,7 +142,7 @@ func TestGoModuleSemanticContractAcceptsCanonicalTidyAndRejectsDrift(t *testing.
 	for left, right := 0, len(reversed)-1; left < right; left, right = left+1, right-1 {
 		reversed[left], reversed[right] = reversed[right], reversed[left]
 	}
-	accepted := []string{canonical, strings.Replace(canonical, "go 1.24.0", "go 1.24", 1), goModFromDependencies(c, reversed)}
+	accepted := []string{canonical, strings.Replace(canonical, "go 1.25.0", "go 1.25", 1), goModFromDependencies(c, reversed)}
 	for _, input := range accepted {
 		if err := c.verifyGoMod([]byte(input)); err != nil {
 			t.Fatalf("canonical module rejected: %v", err)
@@ -150,13 +150,13 @@ func TestGoModuleSemanticContractAcceptsCanonicalTidyAndRejectsDrift(t *testing.
 	}
 	mutations := []string{
 		strings.Replace(canonical, c.ModulePath, "example.invalid/fork", 1),
-		strings.Replace(canonical, "go 1.24.0", "go 1.25.0", 1),
-		strings.Replace(canonical, "\tgolang.org/x/sys v0.40.0\n", "", 1),
+		strings.Replace(canonical, "go 1.25.0", "go 1.26.0", 1),
+		strings.Replace(canonical, "\tgolang.org/x/sys v0.47.0\n", "", 1),
 		strings.Replace(canonical, ")\n", "\tgolang.org/x/text v0.1.0\n)\n", 1),
-		strings.Replace(canonical, "golang.org/x/sys v0.40.0", "golang.org/x/sys v0.39.0", 1),
+		strings.Replace(canonical, "golang.org/x/sys v0.47.0", "golang.org/x/sys v0.46.0", 1),
 		canonical + "replace golang.org/x/sys => ../sys\n",
-		canonical + "exclude golang.org/x/sys v0.40.0\n",
-		canonical + "toolchain go1.24.1\n",
+		canonical + "exclude golang.org/x/sys v0.47.0\n",
+		canonical + "toolchain go1.25.1\n",
 		canonical + "tool golang.org/x/mod/cmd/gofix\n",
 	}
 	for _, input := range mutations {
@@ -179,7 +179,7 @@ func TestGoSumSemanticContractRejectsClosureAndDigestDrift(t *testing.T) {
 		strings.Replace(valid, "golang.org/x/sys", "example.invalid/sys", 1),
 		strings.Replace(valid, "h1:AAAA", "h2:AAAA", 1),
 		strings.Replace(valid, "h1:AAAA", "h1:not-base64", 1),
-		strings.Replace(valid, "golang.org/x/mod v0.27.0", "golang.org/x/sys v0.40.0", 1),
+		strings.Replace(valid, "golang.org/x/mod v0.40.0", "golang.org/x/sys v0.47.0", 1),
 	}
 	for _, input := range invalid {
 		if c.verifyGoSum([]byte(input)) == nil {
@@ -666,7 +666,7 @@ func goModFromDependencies(contract Contract, dependencies []Dependency) string 
 			direct.WriteString(line + "\n")
 		}
 	}
-	result := "module " + contract.ModulePath + "\n\ngo 1.24.0\n\nrequire (\n" + direct.String() + ")\n"
+	result := "module " + contract.ModulePath + "\n\ngo " + contract.GoCompatibility + ".0\n\nrequire (\n" + direct.String() + ")\n"
 	if indirect.Len() != 0 {
 		result += "\nrequire (\n" + indirect.String() + ")\n"
 	}
