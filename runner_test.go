@@ -139,3 +139,70 @@ func TestResultRecordsTheExecutableItRan(t *testing.T) {
 		}
 	})
 }
+
+// TestResolutionFollowsLookupEnv closes the gap issue #46 reported. LookupEnv is
+// the Runner's single source of environment values, but resolution used to read
+// the process PATH through exec.Command, so an embedder that supplied a PATH got
+// a binary the host chose. The manifest and the embedder now decide together.
+func TestResolutionFollowsLookupEnv(t *testing.T) {
+	root := t.TempDir()
+	writeTestFile(t, root, "instructions.md", "be useful")
+	w, _ := OpenWorkspace(root)
+
+	bin := t.TempDir()
+	tool := filepath.Join(bin, "probe-tool")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\nprintf accepted\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	manifest := func(command string) TaskManifest {
+		m := testManifest(os.Args[0], "echo")
+		m.Command = []string{command}
+		m.Acceptance = TaskAcceptance{ExitCodes: []int{0}}
+		return m
+	}
+
+	t.Run("an empty search path finds nothing", func(t *testing.T) {
+		empty := t.TempDir()
+		result, err := (Runner{Workspace: w, LookupEnv: func(key string) (string, bool) {
+			if key == "PATH" {
+				return empty, true
+			}
+			return "", false
+		}}).Run(context.Background(), manifest("probe-tool"))
+		if err == nil {
+			t.Fatal("resolution ignored the supplied PATH")
+		}
+		if !strings.Contains(err.Error(), "executable file not found") || result.ExitCode != -1 || result.ExecutablePath != "" {
+			t.Fatalf("unexpected failure shape: %#v / %v", result, err)
+		}
+	})
+
+	t.Run("the supplied search path decides", func(t *testing.T) {
+		result, err := (Runner{Workspace: w, LookupEnv: func(key string) (string, bool) {
+			if key == "PATH" {
+				return bin, true
+			}
+			return "", false
+		}}).Run(context.Background(), manifest("probe-tool"))
+		if err != nil {
+			t.Fatalf("run: %v (%#v)", err, result)
+		}
+		if result.ExecutablePath != tool {
+			t.Fatalf("executable path = %q, want %q", result.ExecutablePath, tool)
+		}
+	})
+
+	t.Run("relative and empty entries are skipped", func(t *testing.T) {
+		for _, search := range []string{"", ":", "relative/bin", "." + string(os.PathListSeparator) + "also/relative"} {
+			_, err := (Runner{Workspace: w, LookupEnv: func(key string) (string, bool) {
+				if key == "PATH" {
+					return search, true
+				}
+				return "", false
+			}}).Run(context.Background(), manifest("probe-tool"))
+			if err == nil {
+				t.Fatalf("PATH %q resolved against the runtime working directory", search)
+			}
+		}
+	})
+}
