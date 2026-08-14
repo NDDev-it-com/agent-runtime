@@ -52,6 +52,21 @@ func Load(path string) (Contract, error) {
 	return c, nil
 }
 
+// VerifyRelease holds the release workflow to the same compatibility toolchain
+// as the test lane. The release job builds and publishes the module, so a
+// release lane below the module's own go directive cannot run at all — and
+// nothing noticed, because this contract used to read only ci.yml.
+func VerifyRelease(c Contract, workflow []byte) error {
+	version, err := jobGoVersion(string(workflow), "release")
+	if err != nil {
+		return err
+	}
+	if normalizeMinor(version) != normalizeMinor(c.CompatibilityGo) {
+		return fmt.Errorf("release job Go %s differs from compatibility Go %s", version, c.CompatibilityGo)
+	}
+	return nil
+}
+
 func VerifyWorkflow(c Contract, workflow []byte) error {
 	text := string(workflow)
 	testVersion, err := jobGoVersion(text, "test")

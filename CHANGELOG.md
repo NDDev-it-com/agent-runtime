@@ -6,7 +6,7 @@ contract.
 
 ## [Unreleased]
 
-## [0.1.0] - 2026-08-14
+## [0.1.1] - 2026-08-14
 
 ### Added
 
@@ -105,6 +105,13 @@ contract.
 
 ### Fixed
 
+- The release workflow builds again. It pinned Go 1.24 while the module declares
+  `go 1.25.0`, so the publish job failed at its first step with
+  `go.mod requires go >= 1.25.0 (running go 1.24.13; GOTOOLCHAIN=local)` and
+  never produced an asset. `check-ci-contract` read only `ci.yml`, so the release
+  lane could drift away from the compatibility toolchain unseen; it now verifies
+  both workflows and fails when the release lane and the module's own directive
+  disagree.
 - The GDS repository anchor lists the verification commands CI actually runs.
   `staticcheck` became a required CI step and `govulncheck` has always been one,
   but neither appeared in `.gds/repository.yaml`, so the control plane's view of
@@ -209,5 +216,13 @@ contract.
   of which existed in the database when the lane was pinned. All three are fixed
   in 1.26.6, and the scan is clean on it.
 
-[Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.0...HEAD
-[0.1.0]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.0
+## [0.1.0] - 2026-08-14
+
+Tagged, never published. The release job could not run, and both the tag and the
+Go module proxy entry for `v0.1.0` are immutable, so the tag is left in place and
+the first published release is `v0.1.1`. Everything listed under `[0.1.1]` was
+already present at this tag; only the release lane differs.
+
+[Unreleased]: https://github.com/NDDev-it-com/agent-runtime/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.1
+[0.1.0]: https://github.com/NDDev-it-com/agent-runtime/releases/tag/v0.1.0 (tag only; no release)

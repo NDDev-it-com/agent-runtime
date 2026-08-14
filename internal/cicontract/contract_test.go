@@ -165,3 +165,45 @@ func TestRejectsContractMissingAToolPin(t *testing.T) {
 		})
 	}
 }
+
+// TestReleaseLaneTracksTheCompatibilityToolchain covers the lane that publishes.
+// It is not the same file as the test lane, and until it was read here a bump to
+// the module's go directive could leave the release job on a toolchain that
+// cannot build the module at all — which is exactly how the v0.1.0 tag ended up
+// with no release behind it.
+func TestReleaseLaneTracksTheCompatibilityToolchain(t *testing.T) {
+	t.Parallel()
+	workflow, err := os.ReadFile(filepath.Join("..", "..", ".github", "workflows", "release.yml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	contract, err := Load(filepath.Join("..", "..", "security-tools.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifyRelease(contract, workflow); err != nil {
+		t.Fatal(err)
+	}
+
+	for name, test := range map[string]struct{ workflow, want string }{
+		"lane below the module go directive": {
+			strings.Replace(string(workflow), "go-version: '1.25.x'", "go-version: '1.24.x'", 1),
+			"differs from compatibility Go",
+		},
+		"lane ahead of the compatibility declaration": {
+			strings.Replace(string(workflow), "go-version: '1.25.x'", "go-version: '1.26.x'", 1),
+			"differs from compatibility Go",
+		},
+		"no release job": {
+			strings.Replace(string(workflow), "\n  release:\n", "\n  publish:\n", 1),
+			"job release not found",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := VerifyRelease(contract, []byte(test.workflow))
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("error=%v, want %q", err, test.want)
+			}
+		})
+	}
+}

@@ -8,13 +8,13 @@
   "required": ["schema_version", "version", "module_path", "go_compatibility", "license", "dependencies", "source_commit", "archive_prefix", "workflow", "allowed_signers", "assets", "limits", "actions"],
   "properties": {
     "schema_version": {"const": "v1alpha1"},
-    "version": {"const": "v0.1.0"},
+    "version": {"const": "v0.1.1"},
     "module_path": {"const": "github.com/NDDev-it-com/agent-runtime"},
     "go_compatibility": {"const": "1.25"},
     "license": {"const": "AGPL-3.0-only"},
     "dependencies": {"type": "array", "minItems": 5, "maxItems": 5, "uniqueItems": true, "items": {"type": "object", "additionalProperties": false, "required": ["module_path", "version", "license"], "properties": {"module_path": {"enum": ["github.com/ProtonMail/go-crypto", "github.com/cloudflare/circl", "golang.org/x/crypto", "golang.org/x/mod", "golang.org/x/sys"]}, "version": {"pattern": "^v[0-9]+\\.[0-9]+\\.[0-9]+$"}, "license": {"const": "BSD-3-Clause"}, "indirect": {"type": "boolean"}}}},
     "source_commit": {"const": "HEAD"},
-    "archive_prefix": {"const": "agent-runtime-v0.1.0/"},
+    "archive_prefix": {"const": "agent-runtime-v0.1.1/"},
     "workflow": {"const": ".github/workflows/release.yml"},
     "allowed_signers": {"const": ".github/release-allowed-signers"},
     "assets": {
@@ -22,10 +22,10 @@
       "additionalProperties": false,
       "required": ["archive", "sbom", "notes", "manifest", "checksums"],
       "properties": {
-        "archive": {"const": "agent-runtime-v0.1.0-source.tar.gz"},
-        "sbom": {"const": "agent-runtime-v0.1.0.spdx.json"},
-        "notes": {"const": "release-notes-v0.1.0.md"},
-        "manifest": {"const": "release-manifest-v0.1.0.json"},
+        "archive": {"const": "agent-runtime-v0.1.1-source.tar.gz"},
+        "sbom": {"const": "agent-runtime-v0.1.1.spdx.json"},
+        "notes": {"const": "release-notes-v0.1.1.md"},
+        "manifest": {"const": "release-manifest-v0.1.1.json"},
         "checksums": {"const": "SHA256SUMS"}
       }
     },
