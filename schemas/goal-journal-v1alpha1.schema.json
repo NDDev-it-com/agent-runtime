@@ -14,19 +14,20 @@
       "additionalProperties": false,
       "required": ["id", "intent", "acceptance", "state", "current_phase", "receipts", "created_at", "updated_at"],
       "properties": {
-        "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
+        "id": { "$ref": "#/$defs/identifier" },
         "intent": { "type": "string", "minLength": 1 },
         "acceptance": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/checklistItem" } },
         "non_goals": { "type": "array", "items": { "type": "string", "minLength": 1 } },
         "state": { "enum": ["active", "completed"] },
         "current_phase": { "$ref": "#/$defs/phase" },
-        "receipts": { "type": "object", "additionalProperties": { "$ref": "#/$defs/receipt" } },
+        "receipts": { "type": "object", "propertyNames": { "$ref": "#/$defs/phase" }, "additionalProperties": { "$ref": "#/$defs/receipt" } },
         "created_at": { "type": "string", "format": "date-time" },
         "updated_at": { "type": "string", "format": "date-time" }
       }
     }
   },
   "$defs": {
+    "identifier": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$" },
     "phase": { "enum": ["orient", "gap_plan", "execute", "reconcile", "self_review", "completeness_omission_audit", "verify", "closure"] },
     "evidence": {
       "type": "object", "additionalProperties": false,
@@ -41,7 +42,7 @@
       "type": "object", "additionalProperties": false,
       "required": ["id", "acceptance", "status"],
       "properties": {
-        "id": { "type": "string" }, "acceptance": { "type": "string", "minLength": 1 },
+        "id": { "$ref": "#/$defs/identifier" }, "acceptance": { "type": "string", "minLength": 1 },
         "status": { "enum": ["pending", "complete"] },
         "evidence": { "type": "array", "maxItems": 64, "items": { "$ref": "#/$defs/evidence" } }
       }

@@ -18,6 +18,12 @@ contract.
 
 ### Changed
 
+- Evidence flags on `goal check`, `goal evidence` and `goal advance` are
+  repeatable, so one command can record several evidence records. A single
+  triple behaves exactly as before; an unequal count is rejected.
+- `agent-runtime` with no arguments prints usage to standard error and exits
+  non-zero. `help`, `-h` and `--help` still print to standard output and exit
+  zero.
 - `NewEmitter` rejects a maximum sensitivity above `internal`. An envelope may
   only carry `public` and `internal` attributes, so a higher maximum let
   redaction pass an attribute that envelope validation then rejected, discarding
@@ -30,11 +36,41 @@ contract.
 - `Journal.CompleteItem` appends acceptance evidence instead of replacing it,
   matching the append-only semantics receipts already had.
 
+### Removed
+
+- Unused `canonicalChecks` in the governance contract and the unused `commit`
+  parameter of the release SBOM builder.
+
 ### Fixed
 
 - The published `cancelled` outcome is reachable. `schemas/lifecycle-event-v1alpha1.schema.json`
   advertised it to every consumer while no event kind mapped to it, so no
   producer could ever emit it.
+- The quick start no longer instructs `go install ...@v0.1.0`. The repository has
+  no tag and no GitHub release, so that command failed for every reader; it now
+  installs from `@main` and says plainly that no version has been published.
+- Release output no longer depends on the umask of the shell that built it.
+  `O_CREAT` and `mkdirat` subtract the process umask from a requested mode, so
+  under `umask 077` every published asset was created `0600`, failed the
+  builder's own exact-mode verification, and left residual state. The stage
+  directory and every asset now have their modes set explicitly with `fchmod`,
+  which the umask does not affect, and a bundle built under `umask 002`, `022`
+  and `077` is byte-for-byte identical.
+- The canonical module-verifier assertion is per CI lane rather than per file.
+  It counted invocations across the whole workflow, so a second lane proving the
+  same module closure — a legitimate CI topology — failed the check.
+- The test suite no longer depends on the developer's umask. Release output
+  fixtures and the JSONL permission fixture inherited it, so the same commit
+  passed under `umask 022` and failed under `002` or `077`. The whole module now
+  passes under `002`, `022`, `027` and `077`.
+- The distributable Goal schema matches the Go contract. Checklist item
+  identifiers were unconstrained while the runtime enforced an identifier
+  grammar, and receipts accepted any property name while the runtime requires a
+  phase, so a journal the runtime rejects still validated against the published
+  schema.
+- Schema parity now also covers the event `outcome`, `attempt`, subject kind,
+  actor kind and handoff role vocabularies, and checks the Goal identifier
+  grammar behaviourally against the state machine in both directions.
 - A Goal closure carrying both a debt and a risk always emits `goal.completed`.
   The payload was validated before canonicalisation, so the randomised map order
   behind `debt_kinds` rejected roughly one completion in ten and a durably
