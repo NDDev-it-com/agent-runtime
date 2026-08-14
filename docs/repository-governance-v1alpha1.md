@@ -15,9 +15,17 @@ successful PR and main evidence:
 
 The policy requires zero approvals and does not require code-owner review,
 last-push approval, conversation resolution, deployments, or a merge queue.
-All repository-supported merge methods remain available and repository
-auto-merge must be enabled. This keeps autonomous development possible while
-making CI and CodeQL non-bypassable at the repository ruleset layer.
+Merge is the only permitted merge method, and repository auto-merge must be
+enabled. This keeps autonomous development possible while making CI and CodeQL
+non-bypassable at the repository ruleset layer.
+
+The merge-method constraint is not a preference. `internal/provenance` binds an
+integration commit to an exact PR base, head, tree and ordered parents, and
+requires a two-parent merge. Squash and rebase discard that relation by
+construction — neither preserves the PR head as a parent — so a change
+integrated either way reaches `main` in a state `check-provenance` must reject,
+and `docs/releasing.md` step 3 could not be satisfied. Constraining the ruleset
+is the only resolution that keeps the property provenance exists to prove.
 The validator also requires the inherited effective deletion,
 non-fast-forward, and verified-signature rules to remain present, without
 claiming ownership of their organization-level source.

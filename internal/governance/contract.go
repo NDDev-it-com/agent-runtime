@@ -155,8 +155,12 @@ func (c Contract) Validate() error {
 	if p.RequireMergeQueue || p.RequiredDeployments == nil || len(p.RequiredDeployments) != 0 {
 		return errors.New("merge queue and deployment gates are forbidden")
 	}
-	if !equalStrings(p.AllowedMergeMethods, []string{"merge", "squash", "rebase"}) {
-		return errors.New("all repository-supported merge methods must remain available")
+	// The provenance verifier binds an integration commit to an exact PR base,
+	// head, tree and ordered parents. Squash and rebase discard that relation by
+	// construction: neither preserves the PR head as a parent. Permitting them
+	// would let a change reach main that check-provenance must then reject.
+	if !equalStrings(p.AllowedMergeMethods, []string{"merge"}) {
+		return errors.New("main must allow only two-parent merge commits, which the provenance contract requires")
 	}
 	if len(c.RequiredChecks) != 4 {
 		return errors.New("exactly four required checks are required")
