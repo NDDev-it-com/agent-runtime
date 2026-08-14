@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"sort"
 )
 
 type Snapshot struct {
@@ -139,41 +138,113 @@ func compareRuleset(desired, observed Ruleset) error {
 	if observed.BypassActors == nil || len(observed.BypassActors) != 0 {
 		return errors.New("repository ruleset contains an unapproved bypass")
 	}
-	desiredRules, err := normalizedRules(desired.Rules)
+	return compareRules(desired.Rules, observed.Rules)
+}
+
+// compareRules compares rules through their typed parameters rather than by raw
+// JSON equality. A live ruleset read carries fields the API adds and never
+// accepts as input, so byte comparison against the desired ruleset can never
+// succeed; it would also turn any future GitHub-side addition into a false
+// drift report while leaving a weakening inside an unmodelled field invisible.
+func compareRules(desired, observed []RulesetRule) error {
+	desiredByType, err := rulesByType(desired)
 	if err != nil {
-		return err
+		return fmt.Errorf("desired ruleset: %w", err)
 	}
-	observedRules, err := normalizedRules(observed.Rules)
+	observedByType, err := rulesByType(observed)
 	if err != nil {
-		return err
+		return fmt.Errorf("observed ruleset: %w", err)
 	}
-	if string(desiredRules) != string(observedRules) {
-		return errors.New("repository ruleset rules drift")
+	for ruleType := range observedByType {
+		if _, expected := desiredByType[ruleType]; !expected {
+			return fmt.Errorf("observed ruleset carries unexpected rule %q", ruleType)
+		}
+	}
+	for ruleType, desiredParameters := range desiredByType {
+		observedParameters, present := observedByType[ruleType]
+		if !present {
+			return fmt.Errorf("observed ruleset is missing rule %q", ruleType)
+		}
+		switch ruleType {
+		case "pull_request":
+			if err := comparePullRequestRule(desiredParameters, observedParameters); err != nil {
+				return err
+			}
+		case "required_status_checks":
+			if err := compareRequiredStatusRule(desiredParameters, observedParameters); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("ruleset rule %q has no comparison", ruleType)
+		}
 	}
 	return nil
 }
 
-func normalizedRules(rules []RulesetRule) ([]byte, error) {
-	type normalized struct {
-		Type       string          `json:"type"`
-		Parameters json.RawMessage `json:"parameters,omitempty"`
+func rulesByType(rules []RulesetRule) (map[string]json.RawMessage, error) {
+	byType := make(map[string]json.RawMessage, len(rules))
+	for _, rule := range rules {
+		if _, exists := byType[rule.Type]; exists {
+			return nil, fmt.Errorf("duplicate rule %q", rule.Type)
+		}
+		byType[rule.Type] = rule.Parameters
 	}
-	items := make([]normalized, len(rules))
-	for i, rule := range rules {
-		var value any
-		if len(rule.Parameters) > 0 {
-			if err := json.Unmarshal(rule.Parameters, &value); err != nil {
-				return nil, err
-			}
-			canonical, err := json.Marshal(value)
-			if err != nil {
-				return nil, err
-			}
-			items[i] = normalized{Type: rule.Type, Parameters: canonical}
-		} else {
-			items[i] = normalized{Type: rule.Type}
+	return byType, nil
+}
+
+func comparePullRequestRule(desiredParameters, observedParameters json.RawMessage) error {
+	var want, got pullRequestParameters
+	if err := decodeStrict(desiredParameters, &want); err != nil {
+		return fmt.Errorf("decode desired pull_request rule: %w", err)
+	}
+	if err := decodeStrict(observedParameters, &got); err != nil {
+		return fmt.Errorf("decode observed pull_request rule: %w", err)
+	}
+	if err := got.neutral(); err != nil {
+		return err
+	}
+	if !equalStrings(got.AllowedMergeMethods, want.AllowedMergeMethods) {
+		return fmt.Errorf("observed ruleset allows merge methods %v, want %v", got.AllowedMergeMethods, want.AllowedMergeMethods)
+	}
+	if got.DismissStaleReviewsOnPush != want.DismissStaleReviewsOnPush ||
+		got.RequireCodeOwnerReview != want.RequireCodeOwnerReview ||
+		got.RequireLastPushApproval != want.RequireLastPushApproval ||
+		got.RequiredApprovingReviewCount != want.RequiredApprovingReviewCount ||
+		got.RequiredReviewThreadResolution != want.RequiredReviewThreadResolution {
+		return errors.New("repository ruleset review gates drift")
+	}
+	return nil
+}
+
+func compareRequiredStatusRule(desiredParameters, observedParameters json.RawMessage) error {
+	var want, got requiredStatusParameters
+	if err := decodeStrict(desiredParameters, &want); err != nil {
+		return fmt.Errorf("decode desired required_status_checks rule: %w", err)
+	}
+	if err := decodeStrict(observedParameters, &got); err != nil {
+		return fmt.Errorf("decode observed required_status_checks rule: %w", err)
+	}
+	if got.StrictRequiredStatusChecksPolicy != want.StrictRequiredStatusChecksPolicy || got.DoNotEnforceOnCreate != want.DoNotEnforceOnCreate {
+		return errors.New("repository ruleset status-check policy drift")
+	}
+	if len(got.RequiredStatusChecks) != len(want.RequiredStatusChecks) {
+		return fmt.Errorf("observed ruleset requires %d checks, want %d", len(got.RequiredStatusChecks), len(want.RequiredStatusChecks))
+	}
+	observedChecks := make(map[string]int64, len(got.RequiredStatusChecks))
+	for _, check := range got.RequiredStatusChecks {
+		if _, exists := observedChecks[check.Context]; exists {
+			return fmt.Errorf("observed ruleset requires check %q twice", check.Context)
+		}
+		observedChecks[check.Context] = check.IntegrationID
+	}
+	for _, check := range want.RequiredStatusChecks {
+		integration, present := observedChecks[check.Context]
+		if !present {
+			return fmt.Errorf("observed ruleset does not require check %q", check.Context)
+		}
+		if integration != check.IntegrationID {
+			return fmt.Errorf("observed ruleset check %q app identity drift: got %d want %d", check.Context, integration, check.IntegrationID)
 		}
 	}
-	sort.Slice(items, func(i, j int) bool { return items[i].Type < items[j].Type })
-	return json.Marshal(items)
+	return nil
 }

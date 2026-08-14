@@ -109,6 +109,34 @@ type pullRequestParameters struct {
 	RequireLastPushApproval        bool     `json:"require_last_push_approval"`
 	RequiredApprovingReviewCount   int      `json:"required_approving_review_count"`
 	RequiredReviewThreadResolution bool     `json:"required_review_thread_resolution"`
+	// GitHub always returns these two in a live ruleset read and never accepts
+	// them as input, so the desired ruleset omits them. They are real policy
+	// surface — a restricted dismissal set or a required-reviewer list is a
+	// governance change this contract does not describe — so an observed
+	// ruleset must carry them at their neutral values rather than have them
+	// ignored. omitempty keeps them out of the request this package emits.
+	DismissalRestriction *dismissalRestriction `json:"dismissal_restriction,omitempty"`
+	RequiredReviewers    []json.RawMessage     `json:"required_reviewers,omitempty"`
+}
+
+type dismissalRestriction struct {
+	Enabled       bool              `json:"enabled"`
+	AllowedActors []json.RawMessage `json:"allowed_actors"`
+}
+
+// neutral reports whether the parameters GitHub adds carry no policy of their
+// own. An absent field is neutral; a present one must be empty and disabled.
+func (p pullRequestParameters) neutral() error {
+	if len(p.RequiredReviewers) != 0 {
+		return fmt.Errorf("observed ruleset requires %d specific reviewer set(s)", len(p.RequiredReviewers))
+	}
+	if p.DismissalRestriction == nil {
+		return nil
+	}
+	if p.DismissalRestriction.Enabled || len(p.DismissalRestriction.AllowedActors) != 0 {
+		return errors.New("observed ruleset restricts who may dismiss reviews")
+	}
+	return nil
 }
 
 func Load(path string) (Contract, error) {

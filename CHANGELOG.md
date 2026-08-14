@@ -69,6 +69,15 @@ contract.
 
 ### Fixed
 
+- `check-governance-contract --snapshot` accepts a live API capture. Ruleset
+  rules were compared by raw JSON equality against the request body derived from
+  the contract, but GitHub's ruleset read always returns `dismissal_restriction`
+  and `required_reviewers`, which it never accepts as input — so the documented
+  way to prove the live repository matches the contract could not pass, and the
+  hand-written fixture that hid this omitted both fields. Rules are now compared
+  through their typed parameters, the two returned fields are asserted to be
+  neutral rather than ignored, and any parameter the contract does not model
+  fails by name instead of as an unattributed "rules drift".
 - The published `cancelled` outcome is reachable. `schemas/lifecycle-event-v1alpha1.schema.json`
   advertised it to every consumer while no event kind mapped to it, so no
   producer could ever emit it.
