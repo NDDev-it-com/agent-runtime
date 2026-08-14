@@ -30,6 +30,11 @@ jobs:
           cache: false
       - run: go test -race ./...
       - run: go vet ./...
+      - name: Run pinned static analysis
+        run: |
+          set -euo pipefail
+          go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 -version
+          go run honnef.co/go/tools/cmd/staticcheck@v0.6.1 ./...
       - name: Run every contracted fuzz target independently
         run: go run ./cmd/check-fuzz
       - run: go build ./cmd/agent-runtime

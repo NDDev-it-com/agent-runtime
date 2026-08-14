@@ -743,35 +743,6 @@ func copyDir(t *testing.T, src, dst string) {
 		mustWrite(t, filepath.Join(dst, e.Name()), b)
 	}
 }
-func writeArchive(t *testing.T, p string, headers []*tar.Header) {
-	t.Helper()
-	f, err := os.Create(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	gz := gzip.NewWriter(f)
-	tw := tar.NewWriter(gz)
-	for _, h := range headers {
-		if err := tw.WriteHeader(h); err != nil {
-			t.Fatal(err)
-		}
-		if h.Size > 0 {
-			if _, err := tw.Write(bytes.Repeat([]byte{'x'}, int(h.Size))); err != nil {
-				t.Fatal(err)
-			}
-		}
-	}
-	if err := tw.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := gz.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := f.Close(); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func archiveFixtureBytes(t *testing.T, headers []*tar.Header) []byte {
 	t.Helper()
 	var out bytes.Buffer

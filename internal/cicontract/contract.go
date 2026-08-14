@@ -19,6 +19,7 @@ type Contract struct {
 	SchemaVersion   string `json:"schema_version"`
 	License         string `json:"license"`
 	Govulncheck     Tool   `json:"govulncheck"`
+	Staticcheck     Tool   `json:"staticcheck"`
 	SecurityGo      string `json:"security_go"`
 	CompatibilityGo string `json:"compatibility_go"`
 }
@@ -40,8 +41,13 @@ func Load(path string) (Contract, error) {
 	if err := decoder.Decode(&c); err != nil {
 		return Contract{}, fmt.Errorf("decode contract: %w", err)
 	}
-	if c.SchemaVersion != "v1alpha1" || c.License != releasecontract.CanonicalLicense || c.Govulncheck.Module == "" || c.Govulncheck.Version == "" || c.Govulncheck.MinimumGo == "" || c.Govulncheck.UpstreamGoMod == "" || c.SecurityGo == "" || c.CompatibilityGo == "" {
+	if c.SchemaVersion != "v1alpha1" || c.License != releasecontract.CanonicalLicense || c.SecurityGo == "" || c.CompatibilityGo == "" {
 		return Contract{}, errors.New("contract has missing or unsupported fields")
+	}
+	for name, tool := range map[string]Tool{"govulncheck": c.Govulncheck, "staticcheck": c.Staticcheck} {
+		if tool.Module == "" || tool.Version == "" || tool.MinimumGo == "" || tool.UpstreamGoMod == "" {
+			return Contract{}, fmt.Errorf("contract tool %q has missing or unsupported fields", name)
+		}
 	}
 	return c, nil
 }
@@ -65,9 +71,23 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	if scannerVersion != c.SecurityGo {
 		return fmt.Errorf("govulncheck job Go %s differs from patched security Go %s", scannerVersion, c.SecurityGo)
 	}
+	if compareGo(testVersion, c.Staticcheck.MinimumGo) < 0 {
+		return fmt.Errorf("test job Go %s is below staticcheck minimum %s", testVersion, c.Staticcheck.MinimumGo)
+	}
 	pin := c.Govulncheck.Module + "@" + c.Govulncheck.Version
 	if strings.Count(text, pin) != 3 {
 		return fmt.Errorf("workflow must reference pinned %s exactly three times (summary, version evidence, and scan)", pin)
+	}
+	testBody, err := jobBody(text, "test")
+	if err != nil {
+		return err
+	}
+	lintPin := c.Staticcheck.Module + "@" + c.Staticcheck.Version
+	if strings.Count(testBody, lintPin) != 2 {
+		return fmt.Errorf("test job must reference pinned %s exactly twice (version evidence and analysis)", lintPin)
+	}
+	if strings.Count(text, lintPin) != strings.Count(testBody, lintPin) {
+		return fmt.Errorf("pinned %s must be invoked only from the test job", lintPin)
 	}
 	if !strings.Contains(text, "GOTOOLCHAIN: local") {
 		return errors.New("workflow must set GOTOOLCHAIN: local")
@@ -108,7 +128,7 @@ func verifyReleaseReproductionCommand(workflow string) error {
 	}
 	return nil
 }
-func jobGoVersion(workflow, job string) (string, error) {
+func jobBody(workflow, job string) (string, error) {
 	marker := "  " + job + ":\n"
 	start := strings.Index(workflow, marker)
 	if start < 0 {
@@ -118,6 +138,14 @@ func jobGoVersion(workflow, job string) (string, error) {
 	jobBoundary := regexp.MustCompile(`(?m)^  [a-zA-Z0-9_-]+:\s*$`)
 	if next := jobBoundary.FindStringIndex(body); next != nil {
 		body = body[:next[0]]
+	}
+	return body, nil
+}
+
+func jobGoVersion(workflow, job string) (string, error) {
+	body, err := jobBody(workflow, job)
+	if err != nil {
+		return "", err
 	}
 	version := regexp.MustCompile(`go-version:\s*'([^']+)'`).FindStringSubmatch(body)
 	if version == nil {

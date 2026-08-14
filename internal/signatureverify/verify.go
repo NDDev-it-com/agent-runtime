@@ -100,10 +100,6 @@ func Verify(ctx context.Context, request Request) (Result, error) {
 	return verifyWithOptions(ctx, request, canonicalTrustPolicy, verifyOptions{commands: execRunner{}, snapshot: defaultSnapshotOperations()})
 }
 
-func verify(ctx context.Context, request Request, commands runner) (Result, error) {
-	return verifyWithOptions(ctx, request, canonicalTrustPolicy, verifyOptions{commands: commands, snapshot: defaultSnapshotOperations()})
-}
-
 func verifyWithPolicy(ctx context.Context, request Request, commands runner, policy trustPolicy) (Result, error) {
 	return verifyWithOptions(ctx, request, policy, verifyOptions{commands: commands, snapshot: defaultSnapshotOperations()})
 }

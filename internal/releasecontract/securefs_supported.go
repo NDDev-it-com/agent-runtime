@@ -20,8 +20,6 @@ import (
 	"golang.org/x/sys/unix"
 )
 
-var errSecurePublicationUnsupported = errors.New("secure no-replace release publication is unsupported")
-
 type fileIdentity struct{ dev, ino uint64 }
 
 type fdRole string

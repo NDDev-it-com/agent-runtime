@@ -87,9 +87,12 @@ covers every other asset and deliberately does not checksum itself.
    hard-code an inferred contract path or pre-create an output leaf: the builder
    owns staging and publishes each complete bundle with atomic no-replace
    semantics.
-6. Run full tests, race, fuzz seeds, vet, formatting, CI/security/governance
-   contracts and pinned `govulncheck` under the exact patched Go 1.26.6
-   security lane. The module declaration and test/release lanes remain Go 1.24.
+6. Run full tests, race, fuzz seeds, vet, pinned `staticcheck`, formatting,
+   CI/security/governance contracts and pinned `govulncheck` under the exact
+   patched Go 1.26.6 security lane. Both external tools are pinned by module
+   path and version in `security-tools.json` and verified by
+   `check-ci-contract`; the linter runs on the Go 1.24 compatibility lane, so
+   its own minimum Go is part of that contract. The module declaration and test/release lanes remain Go 1.24.
    Run `go run ./cmd/check-fuzz` for the active fuzzing gate. It inventories
    every repository fuzz target and runs each exact package/target separately
    with the versioned bounds in `fuzz/v1alpha1.json`; direct multi-package
