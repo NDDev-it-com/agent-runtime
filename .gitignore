@@ -3,3 +3,7 @@
 *.test
 .DS_Store
 *.lock
+# Harness state. This module's .gds anchor sets agent.serena.enabled: false, so
+# Serena state written here is a tooling artefact, not repository content
+# (github-device-sync#199).
+/.serena/

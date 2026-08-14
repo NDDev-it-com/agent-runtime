@@ -5,40 +5,50 @@ package governance
 import (
 	"errors"
 	"fmt"
-	"strings"
+	"slices"
+
+	"github.com/NDDev-it-com/agent-runtime/internal/actions"
 )
 
+// VerifyCIWorkflow proves the workflow actually produces the check-runs the
+// branch requires. A required context is a name the branch waits for, so the
+// job that emits it must exist, must run, must run for every event the branch
+// gates on, and must not rename itself out from under the requirement.
 func VerifyCIWorkflow(contract Contract, workflow []byte) error {
 	if err := contract.Validate(); err != nil {
 		return err
 	}
-	text := strings.ReplaceAll(string(workflow), "\r\n", "\n")
-	onBlock, err := yamlBlock(text, "on", 0)
+	w, err := actions.Parse(workflow)
 	if err != nil {
 		return err
 	}
-	if !hasYAMLKey(onBlock, "pull_request", 2) {
+	pullRequest := w.Triggers["pull_request"]
+	if !pullRequest.Present {
 		return errors.New("CI workflow must run for every pull_request")
 	}
-	if strings.Contains(onBlock, "paths:") || strings.Contains(onBlock, "paths-ignore:") {
-		return errors.New("CI workflow pull_request/push triggers must not use path filters")
-	}
-	if !hasYAMLKey(onBlock, "push", 2) || !strings.Contains(onBlock, "branches: [main]") {
+	push := w.Triggers["push"]
+	if !push.Present || !slices.Equal(push.Branches, []string{"main"}) {
 		return errors.New("CI workflow must run on every push to main")
 	}
-	jobsBlock, err := yamlBlock(text, "jobs", 0)
-	if err != nil {
-		return err
+	// A path filter turns a required check into one that never reports on the
+	// changes it skipped, which leaves the branch waiting forever or, worse,
+	// merging on a check that never examined the diff.
+	for name, trigger := range map[string]actions.Trigger{"pull_request": pullRequest, "push": push} {
+		if len(trigger.Paths) != 0 || len(trigger.PathsIgnore) != 0 {
+			return fmt.Errorf("CI workflow %s trigger must not use path filters", name)
+		}
 	}
 	for _, check := range contract.RequiredChecks {
 		if check.Producer.Kind != "workflow" {
 			continue
 		}
-		jobBlock, err := yamlBlock(jobsBlock, check.Producer.Job, 2)
+		job, err := w.Job(check.Producer.Job)
 		if err != nil {
 			return fmt.Errorf("required check %q: %w", check.Context, err)
 		}
-		if hasYAMLKey(jobBlock, "name", 4) {
+		// GitHub names the check-run after the job's `name` when one is set, so
+		// an override silently detaches the run from the required context.
+		if job.NameSet {
 			return fmt.Errorf("required job %q must not override its stable check name", check.Producer.Job)
 		}
 		if check.Producer.MatrixOS == "" {
@@ -50,49 +60,12 @@ func VerifyCIWorkflow(contract Contract, workflow []byte) error {
 		if check.Context != check.Producer.Job+" ("+check.Producer.MatrixOS+")" {
 			return fmt.Errorf("required matrix context %q is not canonical", check.Context)
 		}
-		if !strings.Contains(jobBlock, "os: [ubuntu-latest, macos-latest]") {
-			return errors.New("test matrix must contain the exact Ubuntu and macOS lanes")
+		// The context name carries the matrix value, so the lane that produces
+		// it must still be declared. Dropping a lane retires a required check
+		// without touching the branch.
+		if !slices.Contains(job.Matrix["os"], check.Producer.MatrixOS) {
+			return fmt.Errorf("required check %q needs matrix lane os=%s, which job %q does not declare", check.Context, check.Producer.MatrixOS, check.Producer.Job)
 		}
 	}
 	return nil
-}
-
-func yamlBlock(text, key string, indent int) (string, error) {
-	lines := strings.Split(text, "\n")
-	prefix := strings.Repeat(" ", indent) + key + ":"
-	start := -1
-	for i, line := range lines {
-		if line == prefix || strings.HasPrefix(line, prefix+" ") {
-			if start >= 0 {
-				return "", fmt.Errorf("ambiguous duplicate YAML key %q", key)
-			}
-			start = i
-		}
-	}
-	if start < 0 {
-		return "", fmt.Errorf("YAML key %q not found", key)
-	}
-	end := len(lines)
-	for i := start + 1; i < len(lines); i++ {
-		line := lines[i]
-		if strings.TrimSpace(line) == "" || strings.HasPrefix(strings.TrimSpace(line), "#") {
-			continue
-		}
-		leading := len(line) - len(strings.TrimLeft(line, " "))
-		if leading <= indent {
-			end = i
-			break
-		}
-	}
-	return strings.Join(lines[start:end], "\n"), nil
-}
-
-func hasYAMLKey(block, key string, indent int) bool {
-	prefix := strings.Repeat(" ", indent) + key + ":"
-	for _, line := range strings.Split(block, "\n") {
-		if line == prefix || strings.HasPrefix(line, prefix+" ") {
-			return true
-		}
-	}
-	return false
 }

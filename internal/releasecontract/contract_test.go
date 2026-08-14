@@ -215,16 +215,31 @@ func TestWorkflowRejectsPublicationWeakening(t *testing.T) {
 		{"PR publication", func(s string) string { return strings.Replace(s, "  push:\n", "  pull_request:\n  push:\n", 1) }},
 		{"unpinned action", func(s string) string { return strings.Replace(s, c.Actions.Checkout, "actions/checkout@v7", 1) }},
 		{"missing OIDC", func(s string) string { return strings.Replace(s, "      id-token: write\n", "", 1) }},
-		{"clobber", func(s string) string { return s + "\n# --clobber\n" }},
+		// These three put the forbidden command where a runner would execute
+		// it. Appending it as a trailing YAML comment, as this suite used to,
+		// proved only that the old checker matched text: a comment weakens
+		// nothing, and a negative fixture that cannot weaken anything is not a
+		// negative fixture.
+		{"clobber", func(s string) string {
+			return strings.Replace(s, "            --verify-tag \\\n", "            --verify-tag \\\n            --clobber \\\n", 1)
+		}},
 		{"rerun", func(s string) string { return strings.Replace(s, "    if: github.run_attempt == 1\n", "", 1) }},
-		{"ambient Git trust", func(s string) string { return s + "\n# git config gpg.ssh.allowedSignersFile attacker\n" }},
-		{"direct Git verifier", func(s string) string { return s + "\n# git verify-tag v0.1.0\n" }},
+		{"ambient Git trust", func(s string) string {
+			return strings.Replace(s, "          set -euo pipefail\n          test \"$RELEASE_REF\"", "          set -euo pipefail\n          git config gpg.ssh.allowedSignersFile attacker\n          test \"$RELEASE_REF\"", 1)
+		}},
+		{"direct Git verifier", func(s string) string {
+			return strings.Replace(s, "          set -euo pipefail\n          test \"$RELEASE_REF\"", "          set -euo pipefail\n          git verify-tag \"$RELEASE_TAG\"\n          test \"$RELEASE_REF\"", 1)
+		}},
 	}
 	for _, tc := range mutations {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			if c.VerifyWorkflow([]byte(tc.edit(string(data)))) == nil {
+			mutated := tc.edit(string(data))
+			if mutated == string(data) {
+				t.Fatal("mutation is stale: it no longer changes the workflow")
+			}
+			if c.VerifyWorkflow([]byte(mutated)) == nil {
 				t.Fatal("unsafe workflow accepted")
 			}
 		})

@@ -164,7 +164,7 @@ func TestWorkflowRejectsTriggerPathAndJobGaps(t *testing.T) {
 		}, "stable check name"},
 		{"matrix gap", func(s string) string {
 			return strings.Replace(s, "os: [ubuntu-latest, macos-latest]", "os: [ubuntu-latest]", 1)
-		}, "exact Ubuntu and macOS"},
+		}, "does not declare"},
 	}
 	for _, tc := range tests {
 		tc := tc

@@ -8,6 +8,23 @@ contract.
 
 ### Changed
 
+- The CI, release and governance contracts are proven against a parsed GitHub
+  Actions model instead of the workflow text. All three verifiers matched
+  strings, so a required command kept its evidence value while losing its
+  execution: commenting out the entire signed exact-main, signature and
+  provenance step left `release.yml` a valid seven-step workflow and all three
+  checkers exited zero. Only enabled steps of enabled jobs now count, YAML and
+  shell comments are prose, and anchors, aliases and duplicate keys are refused
+  rather than approximated. The model also expresses properties text could not:
+  pins are counted per lane, `persist-credentials: false` is required on the
+  release checkout, write scopes must be enumerated on the publishing job
+  alone, publication must be reachable only from a `v*.*.*` tag, and a required
+  matrix lane cannot be dropped or renamed out from under its check name.
+- `github.com/goccy/go-yaml` enters the dependency closure as the parser behind
+  that model. Fixing a hand-rolled-parser defect with a second hand-rolled
+  parser would repeat it. The release contract's dependency licence rule, which
+  was a single `BSD-3-Clause` constant, is now a closed allowlist.
+
 - The GDS repository anchor declares the status checks the protected branch
   actually requires. `verification.commands` said how the module proves itself
   locally and nothing said what a merge here enforces, so the branch could lose

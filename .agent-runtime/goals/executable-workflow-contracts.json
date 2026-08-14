@@ -1,0 +1,124 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 8,
+  "goal": {
+    "id": "executable-workflow-contracts",
+    "intent": "Contract checkers prove executable Actions semantics rather than matching workflow text",
+    "acceptance": [
+      {
+        "id": "semantic-model",
+        "acceptance": "All three workflow verifiers reason over an Actions model in which comments and disabled jobs are not evidence",
+        "status": "pending"
+      },
+      {
+        "id": "adversarial",
+        "acceptance": "Mutation tests fail closed for comment, if:false, wrong lane, non-executed scalar, renamed job, dropped matrix entry, relocated permission and YAML alias",
+        "status": "pending"
+      },
+      {
+        "id": "no-regression",
+        "acceptance": "Current workflows pass unchanged with no pin, permission or trigger weakened",
+        "status": "pending"
+      },
+      {
+        "id": "reproductions-die",
+        "acceptance": "The recorded comment-out mutations of the release identity step and the fuzz gate both fail the checkers",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Change which commands CI runs",
+      "Widen any workflow token"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "A shell comment inside an executed run script was still counted, so demoting check-signature to a trailing comment survived the first model. Run scripts now have POSIX shell comments stripped with quoting state tracked, closing the last relocation the model missed.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/actions/workflow_test.go TestShellCommentsAreNotEvidence",
+            "result": "Six cases pin the boundary, including hashes inside single and double quotes and a hash with no preceding whitespace, which must all stay executable text."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:01:41.683649395Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Added internal/actions with the workflow model, shell-comment-aware run scripts and fail-closed parsing. Rewrote the cicontract, releasecontract and governance verifiers against it, adding per-lane pin counting, persist-credentials, trigger, permission-scope, matrix-lane and check-name assertions that text matching could not express.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/actions/workflow.go; internal/cicontract/contract.go; internal/releasecontract/contract.go; internal/governance/workflow.go",
+            "result": "All four contract checkers accept the unmodified workflows; the module closure stayed at six modules and twelve go.sum lines."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:01:41.607615793Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Adopt github.com/goccy/go-yaml and build internal/actions, a narrow Actions model in which only enabled steps of enabled jobs are evidence. Reject anchors, aliases and duplicate keys rather than approximate them. Rewrite all three verifiers against it and add mutation tests on the relocation axis the previous suite never covered.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "go.mod; go.sum",
+            "result": "goccy/go-yaml v1.19.2 is a single module with zero transitive go.sum entries and detects duplicate keys by default; gopkg.in/yaml.v3 was rejected because its pre-pruning go.mod drags gopkg.in/check.v1 into the pinned closure"
+          }
+        ],
+        "recorded_at": "2026-08-14T23:01:41.580830771Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Three workflow verifiers matched text: releasecontract used strings.Contains, cicontract global strings.Count, governance a hand-rolled indentation parser. None built an Actions model, so a required command preserved in a comment, a disabled job, another lane or a non-executed scalar still counted as present.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "commented out the release identity step in .github/workflows/release.yml",
+            "result": "check-ci-contract, check-release-contract and check-governance-contract all exited 0 while the signature, provenance and exact-main gate was absent from the parsed job"
+          }
+        ],
+        "recorded_at": "2026-08-14T23:01:41.555546212Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "Adding the parser dependency propagated to release/v1alpha1.json, the release-contract schema and the Go licence rule, which was a single BSD-3-Clause constant. Widened it to a closed allowlist rather than removing the check.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "go run ./cmd/check-release-contract",
+            "result": "release contract valid: v0.1.3, five source/module assets, Go 1.25; the dependency closure now names github.com/goccy/go-yaml v1.19.2 under MIT."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:01:41.633285629Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "Three pre-existing negative fixtures were passing for the wrong reason: they appended the forbidden token as a trailing YAML comment, which weakens nothing. Rewrote them to place the forbidden command in an executed run script, and added a staleness guard that fails when a mutation stops changing the workflow.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/releasecontract/contract_test.go TestWorkflowRejectsPublicationWeakening",
+            "result": "clobber, ambient Git trust and direct Git verifier now mutate the gh release create invocation and the identity script; each fails closed and each asserts it actually changed the file."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:01:41.658588919Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "gofmt, go vet, staticcheck v0.7.0, the full suite under umask 002, race, all six contract checkers, and a deterministic double release build compared byte for byte.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local gate transcript 2026-08-15",
+            "result": "All green. Twenty relocation and ambiguity mutations of the real workflows are rejected and the unmodified workflows are accepted."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:01:41.709961566Z"
+      }
+    },
+    "created_at": "2026-08-14T22:44:49.112585765Z",
+    "updated_at": "2026-08-14T23:01:41.709961566Z"
+  }
+}
