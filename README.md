@@ -28,7 +28,7 @@ protocol, scheduler, or operating-system sandbox.
 Requires Go 1.25 or newer.
 
 ```sh
-go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.1.3
+go install github.com/NDDev-it-com/agent-runtime/cmd/agent-runtime@v0.2.0
 agent-runtime task validate --manifest examples/basic/agent.json --workspace examples/basic
 agent-runtime task run --manifest examples/basic/agent.json --workspace examples/basic
 ```
@@ -92,12 +92,16 @@ The canonical distributable schema is
 The project is released as a Go module/source product. It does not publish
 prebuilt platform binaries.
 
-The current release is `v0.1.3`. `v0.1.2` was the first published one.
+The current release is `v0.2.0`. `v0.1.2` was the first published one.
 `v0.1.0` and `v0.1.1` were tagged but never published — the first pinned a Go
 toolchain below the module's own directive, the second read a repository setting
 its token cannot access, and both failed before building an asset. Those tags
 and their Go module proxy entries are immutable, so they are left in place
 carrying no release assets and no attestations. Use `v0.1.2` or later.
+
+`v0.2.0` breaks the manifest contract deliberately: a Task manifest that states
+a zero timeout, output or context bound is now refused rather than silently
+widened to a default. Manifests that omit a bound are unaffected.
 
 Each tag-only release will contain one deterministic tracked-source archive, an
 SPDX 2.3 JSON SBOM, canonical release notes, a release manifest, and

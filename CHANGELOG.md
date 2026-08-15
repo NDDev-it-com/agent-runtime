@@ -6,13 +6,31 @@ contract.
 
 ## [Unreleased]
 
-### Removed
+## [0.2.0] - 2026-08-15
 
-- `upstream_go_mod` is gone from `security-tools.json` and its Go type. It was
-  required to be non-empty and nothing read, fetched, hashed, parsed or compared
-  it, so it bought no evidence while creating another value to keep in step by
-  hand. Either URL could have been replaced with arbitrary text and every check
-  stayed green.
+A minor bump because the contract breaks. Everything here came out of a forensic
+review of `main@a656bf7` and the work that followed it, and the shape repeats:
+several controls could not fail for the reason they claimed, and several
+declared bounds were not the bounds that held.
+
+### Breaking
+
+- A Task manifest that states a zero bound is refused rather than widened. On
+  the wire, `"timeout": "0s"` and an absent field decode identically in Go, so
+  the narrowest possible request was granted the widest possible default: five
+  minutes, and a mebibyte each of output and context. A negative value was
+  already refused, which made zero the only way to fail open. Defaults now apply
+  only to bounds a document left silent. A Go struct literal still reads its
+  zero fields as silence, because the language records nothing else.
+- `security-tools.json` no longer accepts `upstream_go_mod`. It was required to
+  be non-empty and nothing read, fetched, hashed, parsed or compared it, so
+  either URL could have been replaced with arbitrary text and every check stayed
+  green.
+- The release contract gains `graph_only_modules` and its schema requires it.
+  `go.sum` pins a dependency's own requirements even when nothing here compiles
+  them, and asserting that closure was identical to the build closure would have
+  forced a dependency's test-only module to be recorded as if this module
+  depended on it.
 
 ### Added
 
@@ -24,74 +42,54 @@ contract.
   without. It refuses to pass on an empty directory, because a gate that
   succeeds by finding nothing to inspect cannot be told from one that inspected
   everything.
+- `check-release-contract --expect-commit` takes the commit a bundle must have
+  been built from, resolved by the caller from the checkout rather than read out
+  of the receipt under test.
 
 ### Fixed
 
-- `git` and `ssh-keygen` have one definition. `internal/provenance` repeated
-  `/usr/bin/git` as a raw literal beside `internal/signatureverify`'s constant,
-  and the isolated environment was written out twice — one fact in two places
-  that could drift apart in the code path where drift matters most. Both now
-  resolve through `internal/trustedexec`, which searches a fixed ordered list of
-  absolute directories, never `PATH`, and requires the result to be a regular,
-  non-symlink file that is not group or world writable. This also lets a
-  Homebrew macOS host verify, which the single hardcoded path did not.
-- `.gds/repository.yaml` states how the module is actually consumed. Its module
-  block declared `commit-contract` and `default-branch-commit`, justified by a
-  comment saying no semver tag existed — which stopped being true at `v0.1.2`.
-  It now declares `semver` and `version-tag`, and says why those are separate
-  axes: what this repository promises a consumer, and how this estate takes it.
-
-- `.agent-runtime/goals/first-v0-release.json` is a journal this module accepts.
-  It recorded each recovery cycle under an invented receipt key, which the Goal
-  contract does not permit, so `agent-runtime goal status` refused to load it —
-  and because it is tracked, it shipped inside the published source archive and
-  its SPDX inventory. The module distributed an artifact its own CLI rejects.
-  Tightening the schema so receipt keys must be phases is what made an existing
-  file invalid, and nothing compared the two.
-
-  Every recovery cycle's summary and evidence is preserved, folded into the
-  phase receipt each cycle already named in its own `phase` field, and the
-  replay went through the product's own API so the result is legitimate by
-  construction rather than by hand. One evidence record carried a `source` type
-  that was never in the contracted vocabulary and is recorded as a link. The
-  pre-migration form is in this repository's Git history.
-
-  The journal also now states what happened: the first verifiable v0 release
-  shipped, as `v0.1.2` and then `v0.1.3` rather than `v0.1.0`, and issue #9 is
-  closed. It had stood at `state: active` with all seven acceptance criteria
-  pending since 13 August, claiming the first release had never happened.
-
-- A JSONL sink holds one descriptor for its lifetime. It used to open the path
-  to scan the existing history, close it, and open it again to append, so a
-  rename in between left the recovered duplicate-identity and size state
-  describing the first file while every write went to the second. A destination
-  whose name no longer resolves to the object just opened is refused rather than
-  followed.
-
-### Changed
-
-- The security model records the two check-then-use gaps that remain rather than
-  implying they are closed. Workspace resolution and executable resolution both
-  validate a pathname and act on it a moment later, so an actor with concurrent
-  write access to the running machine can move the used object away from the
-  checked one — which also means `executable_path` records what was inspected.
-  Both sit outside the stated trust boundary, and the entry says what would make
-  them real and what the fix would be if it ever changes.
-
+- The CI, release and governance contracts are proven against a parsed GitHub
+  Actions model instead of the workflow text. All three verifiers matched
+  strings, so a required command kept its evidence value while losing its
+  execution: commenting out the entire signed exact-main, signature and
+  provenance step left `release.yml` a valid seven-step workflow that GitHub
+  would run, and all three checkers exited zero. Only enabled steps of enabled
+  jobs now count, YAML and shell comments are prose, and anchors, aliases and
+  duplicate keys are refused rather than approximated. Pins are counted per
+  lane, the release checkout must set `persist-credentials: false`, write scopes
+  must be enumerated on the publishing job alone, publication must be reachable
+  only from a `v*.*.*` tag, and a required matrix lane cannot be dropped or
+  renamed out from under its check name.
+- A release receipt can no longer attest its own source commit. Verification
+  rejected only an empty `source_commit` and then derived the receipt it
+  expected from the candidate, so replacing that field with any other forty hex
+  characters left the bundle reported valid while it claimed a build from a
+  commit that need not exist. The expected commit is resolved from the checkout,
+  bound to the annotated tag, and cross-checked against the release manifest
+  travelling inside the bundle.
+- Schema parity is executed rather than sampled. The previous test reflected
+  over a handful of chosen constants, and the build-result version was not among
+  them, so that schema required `v0.1.0` while the producer emitted `v0.1.3`
+  across three releases with every test green. Tracked documents are validated
+  against their published schema with a draft-2020-12 validator, each semantic
+  mutation of a Task manifest must be rejected by the schema and by Go alike,
+  and both release schemas are pinned to the contract version.
+- Five `pattern` keywords across two schemas had no `type`, and a pattern only
+  constrains strings, so a version of `12345` passed unexamined. Governance
+  `required_checks` had a length and no shape; it now states both producer forms
+  exactly, each forbidding the other's fields.
 - Malformed evidence can no longer be staged on a pending checklist item.
-  `Validate` checked evidence only on completed items, but acceptance evidence
+  Validation covered evidence only on completed items, but acceptance evidence
   is append-only for every item, so a bad record staged on a pending one could
-  never be removed and `CompleteItem` — which validates the combined set —
-  refused forever. The journal stayed loadable and became impossible to finish
-  without editing the file outside the contract. Well-formed staged evidence is
-  still accepted and still completes.
+  never be removed and completion — which validates the combined set — refused
+  forever. Well-formed staged evidence is still accepted and still completes.
 - A process that returned its own exit status is no longer attributed to the
-  caller. `context.Cause` was read after `Run` returned and any non-nil cause was
-  treated as termination, so a command that had already failed on its own was
-  reported as cancelled whenever the cancellation landed in the window between:
-  measured at five runs in four hundred, against a documented promise that the
-  two are never conflated. Termination is now recognised by the process carrying
-  no status of its own, which is the one thing a context cannot tell you.
+  caller. The cause was read from the context after the run returned and any
+  non-nil cause counted as termination, so a command that had already failed on
+  its own was reported as cancelled whenever the cancellation landed in the
+  window between — five runs in four hundred, against a documented promise that
+  the two are never conflated. Termination is recognised by the process carrying
+  no exit status of its own, which is the one thing a context cannot report.
 - `max_output_bytes` bounds what a caller receives. Raw bytes were capped on the
   way in, then each isolated invalid byte became a three-byte replacement rune
   on the way out, so a twelve-byte budget returned twenty-four bytes into
@@ -99,84 +97,61 @@ contract.
   reapplied after the repair, cut on a rune boundary.
 - A timeout or cancellation ends the Task's process group on Linux and macOS,
   not only the process the runtime launched. Work a command backgrounded kept
-  touching the workspace after the Runner had returned a terminal result and
-  observability had recorded the run as over — measured at 2.7 seconds after a
-  300 ms timeout. Owning the group also releases the output pipes at once, so
-  that run now returns in 301 ms rather than holding for the full grace period.
+  touching the workspace after the Runner had returned a terminal result — 2.7
+  seconds after a 300 ms timeout. Owning the group also releases the inherited
+  pipes at once, so that run now returns in 301 ms rather than holding for the
+  full termination grace.
+- A JSONL sink holds one descriptor for its lifetime. It used to open the path
+  to scan the existing history, close it, and open it again to append, so a
+  rename in between left the recovered duplicate-identity and size state
+  describing the first file while every write went to the second. A destination
+  whose name no longer resolves to the object just opened is refused rather than
+  followed.
+- `git` and `ssh-keygen` have one definition. `internal/provenance` repeated
+  `/usr/bin/git` as a raw literal beside `internal/signatureverify`'s constant,
+  and the isolated environment was written out twice — one fact in two places,
+  in the code path where drift matters most. Both resolve through
+  `internal/trustedexec`, which searches a fixed ordered list of absolute
+  directories, never `PATH`, and requires the result to be a regular,
+  non-symlink file that is not group or world writable. A Homebrew macOS host
+  can now verify, which the single hardcoded path did not allow.
+- `.agent-runtime/goals/first-v0-release.json` is a journal this module accepts.
+  It recorded each recovery cycle under an invented receipt key, so
+  `agent-runtime goal status` refused to load it — and because it is tracked, it
+  shipped inside the published source archive and its SPDX inventory. The module
+  distributed an artifact its own CLI rejects. Every cycle's summary and
+  evidence is preserved, folded into the phase receipt each cycle already named
+  in its own `phase` field, replayed through the product's own API. It also now
+  states what happened: it had stood at `state: active` with all seven
+  acceptance criteria pending, claiming the first release never occurred.
 
 ### Changed
 
+- `docs/releasing.md` no longer claims the tag workflow rejects disabled
+  immutable releases. It cannot: that endpoint needs admin read and the
+  publishing token is held to `contents`, `id-token` and attestation scopes. The
+  manual pre-tag step is the only check of that setting, and the guide says so.
 - The wall-clock ceiling for a run is documented as the manifest timeout plus a
   two-second grace for a terminated process to release its pipes. The grace
   always existed; nothing said so, and `timeout` read as the whole bound.
-
-- A release receipt can no longer attest its own source commit. Verification
-  rejected only an empty `source_commit` and then derived the receipt it
-  expected from the candidate, so replacing that field with any other forty hex
-  characters left `check-release-contract` reporting the bundle valid while it
-  claimed a build from a commit that need not exist. The expected commit is now
-  resolved from the checkout, bound to the annotated tag and cross-checked
-  against the release manifest travelling inside the bundle.
-- A Task manifest that states a zero bound is refused instead of widened. On the
-  wire, `"timeout": "0s"` and an absent field decode identically in Go, so the
-  narrowest possible request was granted the widest possible default: five
-  minutes, and a mebibyte each of output and context. A negative value was
-  already refused, which made zero the only way to fail open. Defaults now apply
-  only to bounds a document left silent; a Go struct literal still reads its
-  zero fields as silence, because the language records nothing else.
-- `schemas/release-build-result-v1alpha1.schema.json` required `v0.1.0` while
-  the producer emitted `v0.1.3`, so a real receipt failed the schema published
-  to describe it. Both release schemas are now pinned to the contract version.
-
-### Changed
-
-- Schema parity is executed rather than sampled. The previous test reflected
-  over a handful of chosen constants, and the build-result version was simply
-  not among them, so it drifted across three releases with every test green.
-  Tracked documents are now validated against their published schema with a
-  draft-2020-12 validator, and each semantic mutation of a Task manifest must be
-  rejected by the schema and by Go alike — a schema that accepts what the
-  runtime refuses splits the producer from the consumer as surely as one that
-  refuses what the runtime produces.
-- Patterns that constrained nothing are typed. Five `pattern` keywords across
-  two schemas had no `type`, and a pattern only applies to strings, so a version
-  of `12345` or a source commit that was an object passed unexamined.
-- `required_checks` in the governance schema had a length and no shape. It now
-  states both producer forms exactly, each forbidding the other's fields, which
-  is what the Go validator already enforced.
-- The release contract distinguishes the build closure from the verified module
-  graph. `go.sum` pins a dependency's own requirements even when nothing here
-  compiles them, and asserting the two sets were identical forced a test-only
-  module of a dependency to be recorded as if this module depended on it.
-  `graph_only_modules` names those pins, and both closures stay exact.
-- `docs/releasing.md` no longer claims the tag workflow rejects disabled
-  immutable releases. It cannot: that endpoint needs admin read and the
-  publishing token is deliberately held to `contents`, `id-token` and
-  attestation scopes. The pre-tag step is the only check of that setting, it is
-  manual, and the guide now says so.
-
-- The CI, release and governance contracts are proven against a parsed GitHub
-  Actions model instead of the workflow text. All three verifiers matched
-  strings, so a required command kept its evidence value while losing its
-  execution: commenting out the entire signed exact-main, signature and
-  provenance step left `release.yml` a valid seven-step workflow and all three
-  checkers exited zero. Only enabled steps of enabled jobs now count, YAML and
-  shell comments are prose, and anchors, aliases and duplicate keys are refused
-  rather than approximated. The model also expresses properties text could not:
-  pins are counted per lane, `persist-credentials: false` is required on the
-  release checkout, write scopes must be enumerated on the publishing job
-  alone, publication must be reachable only from a `v*.*.*` tag, and a required
-  matrix lane cannot be dropped or renamed out from under its check name.
-- `github.com/goccy/go-yaml` enters the dependency closure as the parser behind
-  that model. Fixing a hand-rolled-parser defect with a second hand-rolled
-  parser would repeat it. The release contract's dependency licence rule, which
-  was a single `BSD-3-Clause` constant, is now a closed allowlist.
-
-- The GDS repository anchor declares the status checks the protected branch
-  actually requires. `verification.commands` said how the module proves itself
-  locally and nothing said what a merge here enforces, so the branch could lose
-  a required check without any tracked file changing. The consuming control
-  plane now compares the two on every run and reports drift in both directions.
+- The security model records the two check-then-use gaps that remain rather than
+  implying they are closed. Workspace resolution and executable resolution both
+  validate a pathname and act on it a moment later, so an actor with concurrent
+  write access to the running machine can move the used object away from the
+  checked one — which also means `executable_path` records what was inspected.
+  Both sit outside the stated trust boundary; the entry names what would make
+  them real and what the fix would be. It also states that a host keeping its
+  tools outside the resolver's fixed directories, which in practice means Nix
+  and Guix, cannot verify at all, and why covering them would be worse.
+- `.gds/repository.yaml` states how the module is actually consumed. Its module
+  block declared `commit-contract` and `default-branch-commit`, justified by a
+  comment saying no semver tag existed — which stopped being true at `v0.1.2`.
+  It now declares `semver` and `version-tag`.
+- `github.com/goccy/go-yaml` and `github.com/santhosh-tekuri/jsonschema/v6`
+  enter the dependency closure, as the Actions parser and the schema validator
+  behind the two checks above. Fixing a hand-rolled-parser defect with a second
+  hand-rolled parser would repeat it. The release contract's dependency licence
+  rule, previously a single `BSD-3-Clause` constant, is now a closed allowlist.
 
 ## [0.1.3] - 2026-08-14
 

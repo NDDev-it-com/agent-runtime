@@ -711,7 +711,11 @@ func fixtureRepo(t *testing.T) string {
 	mustWrite(t, filepath.Join(d, "go.sum"), []byte(canonicalGoSum(testContract())))
 	mustWrite(t, filepath.Join(d, "main.go"), []byte("package agentruntime\n"))
 	mustWrite(t, filepath.Join(d, "LICENSE"), []byte("AGPL-3.0-only\n"))
-	mustWrite(t, filepath.Join(d, "CHANGELOG.md"), []byte("# Changelog\n\n## [0.1.3] - 2026-08-14\n\n### Added\n\n- Initial source release.\n"))
+	// Derived from the contract rather than restated, so a version bump does
+	// not silently leave the fixture describing a release that is not the one
+	// under test.
+	version := strings.TrimPrefix(testContract().Version, "v")
+	mustWrite(t, filepath.Join(d, "CHANGELOG.md"), []byte("# Changelog\n\n## ["+version+"] - 2026-08-14\n\n### Added\n\n- Initial source release.\n"))
 	gitRun(t, d, "add", ".")
 	gitRun(t, d, "commit", "-q", "-m", "fixture")
 	return d
