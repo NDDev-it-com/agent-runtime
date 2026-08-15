@@ -6,6 +6,15 @@ contract.
 
 ## [Unreleased]
 
+### Removed
+
+- `actions.Job.RunStepsContaining` is gone. It was added with the workflow model
+  and never called, which is the shape this release spent its time removing
+  everywhere else. Neither `go vet` nor `staticcheck` reports it, because an
+  exported identifier in an `internal/` package is not treated as unused even
+  though nothing outside the module can reach it — so this class is currently
+  found by looking rather than by a gate.
+
 ## [0.2.0] - 2026-08-15
 
 A minor bump because the contract breaks. Everything here came out of a forensic
