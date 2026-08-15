@@ -137,6 +137,13 @@ func VerifyWorkflow(c Contract, workflow []byte) error {
 	if w.CountRunOccurrences("go run ./cmd/check-fuzz") != 1 {
 		return errors.New("workflow must invoke the canonical fuzz verifier exactly once")
 	}
+	// The Goal contract is this module's product, so its tracked artifacts are
+	// held to it in CI like every other contract here. Leaving it unchecked is
+	// how a schema change came to invalidate a journal that ships inside the
+	// release archive.
+	if w.CountRunOccurrences("go run ./cmd/check-goal-journals") != 1 {
+		return errors.New("workflow must invoke the goal journal verifier exactly once")
+	}
 	return verifyReleaseReproductionCommand(test)
 }
 
