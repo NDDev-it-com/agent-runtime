@@ -1,0 +1,123 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 8,
+  "goal": {
+    "id": "self-verified-journals",
+    "intent": "This repository's tracked Goal journals are proven valid by an executable checker",
+    "acceptance": [
+      {
+        "id": "journal-checker",
+        "acceptance": "A required CI checker validates every tracked journal against the Go contract and the published schema",
+        "status": "pending"
+      },
+      {
+        "id": "journals-valid",
+        "acceptance": "goal status succeeds on every tracked journal",
+        "status": "pending"
+      },
+      {
+        "id": "first-release-true",
+        "acceptance": "The first-release journal states the published outcome and closes on its evidence",
+        "status": "pending"
+      },
+      {
+        "id": "no-shipped-invalid",
+        "acceptance": "A built source archive contains no artifact the product rejects",
+        "status": "pending"
+      }
+    ],
+    "non_goals": [
+      "Widen the phase vocabulary to accommodate a malformed journal"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Registered the checker in the CI contract as well as the workflow, so it cannot be dropped from ci.yml while the contract stays green -- the same failure class the workflow model was built to close.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/cicontract/contract.go",
+            "result": "The workflow must invoke the goal journal verifier exactly once, counted over executed run scripts."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:02:27.460260274Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Added journalverify and its command, wired it into ci.yml, the CI contract and the GDS anchor, and migrated first-v0-release.json by replaying its history through goal.New and Advance.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "go run ./cmd/check-goal-journals",
+            "result": "goal journals valid: 9 tracked, accepted by the Goal contract and the published schema."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:02:27.376942287Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Write the checker first so the repair is proven rather than asserted, then fold each recovery cycle into the phase receipt it already named, replaying through the product's own API so the result is legitimate by construction.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/journalverify; cmd/check-goal-journals",
+            "result": "The Goal contract was the only contract in this repository without an executable checker over its tracked artifacts, which is why a schema change could invalidate a shipped file unnoticed."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:02:27.3515585Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "The module shipped a Goal journal its own CLI refuses to load. Twenty-two of the twenty-four receipt keys in first-v0-release.json were invented recovery-cycle labels rather than phases, so goal status failed with invalid_goal; the file is tracked, so it travelled inside the published v0.1.3 source archive and its SPDX inventory. The same journal also claimed the first release had never happened.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "agent-runtime goal status --journal .agent-runtime/goals/first-v0-release.json",
+            "result": "invalid_goal: invalid receipt for phase recovery_cycle_verification_orient; state active with all seven acceptance criteria pending while v0.1.3 was published and issue #9 closed."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:02:27.320657917Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "The migration is lossless in substance: all twenty-four evidence records survive on the phase receipts, and every cycle summary is retained and labelled. One evidence type of 'source' was never in the contracted vocabulary and is recorded as a link.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": ".agent-runtime/goals/first-v0-release.json",
+            "result": "Seven phase receipts carrying 1, 6, 5, 2, 2, 3 and 5 evidence records, then a closure receipt recording both the release outcome and the migration itself."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:02:27.406493571Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "The checker asserts the pair, not one side: Go alone would let the published schema drift, and the schema alone would skip the durable invariants the type enforces. It also refuses an empty directory and requires the file to be the canonical encoding of what it decodes to, so a journal cannot drift each time the runtime rewrites it.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/journalverify TestVerifyRejectsJournalsEitherContractRefuses; TestVerifyRefusesToPassVacuously",
+            "result": "Five damaged shapes are refused, including the exact one that shipped, and an empty directory fails rather than passing."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:02:27.435047951Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "gofmt, go vet, staticcheck, full tests under umask 002, and all seven contract checkers including the new one.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local gate transcript 2026-08-15",
+            "result": "All green; 9 journals verified."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:02:27.487402016Z"
+      }
+    },
+    "created_at": "2026-08-15T00:02:27.292800011Z",
+    "updated_at": "2026-08-15T00:02:27.487402016Z"
+  }
+}

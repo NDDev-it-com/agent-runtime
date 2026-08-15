@@ -54,6 +54,8 @@ jobs:
           fi
       - name: Verify module metadata is tidy without mutation
         run: go run ./cmd/check-module-tidy
+      - name: Verify every tracked Goal journal against the contract and its schema
+        run: go run ./cmd/check-goal-journals
       - run: go run ./cmd/check-ci-contract
       - run: go run ./cmd/check-governance-contract
       - name: Reproduce release bundle without publication

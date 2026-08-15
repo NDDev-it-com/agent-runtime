@@ -57,6 +57,9 @@ verification:
       - "go run ./cmd/check-ci-contract"
       - "go run ./cmd/check-governance-contract"
       - "go run ./cmd/check-release-contract"
+      # The Goal journal is this module's own product, and its tracked
+      # instances are held to the same contract a consumer would apply.
+      - "go run ./cmd/check-goal-journals"
     full:
       # govulncheck resolves the live vulnerability database and needs the
       # patched security toolchain, not the compatibility one, so CI runs it in

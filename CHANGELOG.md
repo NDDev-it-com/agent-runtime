@@ -6,7 +6,38 @@ contract.
 
 ## [Unreleased]
 
+### Added
+
+- `cmd/check-goal-journals` holds every tracked Goal journal to the Go contract
+  and to the published schema, and is a required CI step recorded in the GDS
+  anchor. Every other contract here — CI, governance, release, provenance, fuzz,
+  cold compile — was already proven by an executable checker; the Goal contract,
+  which is the product rather than a property of the repository, was the one
+  without. It refuses to pass on an empty directory, because a gate that
+  succeeds by finding nothing to inspect cannot be told from one that inspected
+  everything.
+
 ### Fixed
+
+- `.agent-runtime/goals/first-v0-release.json` is a journal this module accepts.
+  It recorded each recovery cycle under an invented receipt key, which the Goal
+  contract does not permit, so `agent-runtime goal status` refused to load it —
+  and because it is tracked, it shipped inside the published source archive and
+  its SPDX inventory. The module distributed an artifact its own CLI rejects.
+  Tightening the schema so receipt keys must be phases is what made an existing
+  file invalid, and nothing compared the two.
+
+  Every recovery cycle's summary and evidence is preserved, folded into the
+  phase receipt each cycle already named in its own `phase` field, and the
+  replay went through the product's own API so the result is legitimate by
+  construction rather than by hand. One evidence record carried a `source` type
+  that was never in the contracted vocabulary and is recorded as a link. The
+  pre-migration form is in this repository's Git history.
+
+  The journal also now states what happened: the first verifiable v0 release
+  shipped, as `v0.1.2` and then `v0.1.3` rather than `v0.1.0`, and issue #9 is
+  closed. It had stood at `state: active` with all seven acceptance criteria
+  pending since 13 August, claiming the first release had never happened.
 
 - A JSONL sink holds one descriptor for its lifetime. It used to open the path
   to scan the existing history, close it, and open it again to append, so a

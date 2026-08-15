@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 11,
+  "revision": 12,
   "goal": {
     "id": "held-path-identity",
     "intent": "The JSONL sink writes to the file it read, and every remaining check-then-use gap is stated rather than implied",
@@ -47,9 +47,33 @@
       "Redesign the sandbox model",
       "Defend against a compromised host"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Merged as PR #57 with all four required checks green.",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/57",
+            "result": "Merged to main."
+          }
+        ],
+        "recorded_at": "2026-08-14T23:54:44.325258889Z",
+        "closure": {
+          "achieved_outcome": "The JSONL sink validates and extends one object, and the remaining check-then-use gaps are stated with the trigger that would make them real.",
+          "cleanup": "Task branch deleted locally and on origin; the dead scanJSONL wrapper removed.",
+          "remaining": [],
+          "next_work": [
+            {
+              "type": "issue",
+              "reference": "self verified journals",
+              "result": "Give the Goal contract the executable checker every other contract in this repository already has, and repair the tracked journal that the product rejects."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Checked the other direction as well: a destination whose name resolves elsewhere, such as a symlink, is refused rather than followed, because a caller configured a destination and not whatever currently answers to it.",
@@ -136,6 +160,6 @@
       }
     },
     "created_at": "2026-08-14T23:50:11.022035863Z",
-    "updated_at": "2026-08-14T23:50:11.311924048Z"
+    "updated_at": "2026-08-14T23:54:44.325258889Z"
   }
 }
