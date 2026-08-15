@@ -85,8 +85,12 @@ func Resolve(name string) (string, error) {
 	return got.path, got.err
 }
 
-func search(name string) resolution {
-	for _, directory := range searchPath {
+func search(name string) resolution { return searchIn(searchPath, name) }
+
+// searchIn is separate so a test can exercise the rules without mutating the
+// package's own search path, which parallel tests read.
+func searchIn(directories []string, name string) resolution {
+	for _, directory := range directories {
 		candidate := filepath.Join(directory, name)
 		// Lstat, not Stat: a symlink here would let whatever it points at be
 		// substituted without touching the directory this package trusts.

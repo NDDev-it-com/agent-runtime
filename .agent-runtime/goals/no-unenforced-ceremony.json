@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 11,
+  "revision": 12,
   "goal": {
     "id": "no-unenforced-ceremony",
     "intent": "Every retained contract field buys enforcement and trust tooling resolves without ambient paths",
@@ -56,6 +56,11 @@
             "type": "test",
             "reference": "internal/trustedexec TestSearchNamesWhatItLookedAt",
             "result": "A missing tool fails naming every directory searched and stating that PATH is never read."
+          },
+          {
+            "type": "test",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/actions/runs/31852939515",
+            "result": "CI rejected the first attempt: the writable-tool fixture used WriteFile(0o777), which the umask masks, so it landed at 0755 under the 022 umask CI uses and proved nothing. Modes are now set with Chmod and asserted before use, and the suite is run under umask 022, 002 and 077."
           }
         ],
         "recorded_at": "2026-08-15T00:12:44.466737374Z"
@@ -134,6 +139,6 @@
       }
     },
     "created_at": "2026-08-15T00:12:44.224755101Z",
-    "updated_at": "2026-08-15T00:12:44.624414366Z"
+    "updated_at": "2026-08-15T00:18:10.11806904Z"
   }
 }

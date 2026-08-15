@@ -38,7 +38,7 @@ func TestNeverReadsThePathEnvironment(t *testing.T) {
 	t.Setenv("PATH", fake)
 	// Resolution is cached per process, so ask the search directly rather than
 	// through the cache to prove the environment is not consulted.
-	got := search("git")
+	got := searchIn(searchPath, "git")
 	if got.err != nil {
 		t.Fatalf("resolution failed: %v", got.err)
 	}
@@ -61,7 +61,7 @@ func TestRejectsNamesThatWouldSkipTheSearch(t *testing.T) {
 // say why rather than surfacing as an obscure exec error.
 func TestSearchNamesWhatItLookedAt(t *testing.T) {
 	t.Parallel()
-	got := search("definitely-not-a-real-trust-tool")
+	got := searchIn(searchPath, "definitely-not-a-real-trust-tool")
 	if got.err == nil {
 		t.Fatal("a missing tool resolved")
 	}
@@ -78,16 +78,68 @@ func TestSearchNamesWhatItLookedAt(t *testing.T) {
 
 // TestRefusesAWritableTool covers substitution by anyone who can write the
 // binary rather than the directory.
+//
+// The modes are set with Chmod rather than passed to WriteFile because the
+// creation mode is masked by the process umask: written as 0777 under the 022
+// umask CI uses, the file lands at 0755 and the case proves nothing. This
+// repository has paid for that lesson once already, in the release suite.
 func TestRefusesAWritableTool(t *testing.T) {
+	t.Parallel()
+	for name, mode := range map[string]os.FileMode{
+		"group writable": 0o775,
+		"world writable": 0o757,
+		"both":           0o777,
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			tool := filepath.Join(dir, "toolish")
+			if err := os.WriteFile(tool, []byte("#!/bin/sh\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Chmod(tool, mode); err != nil {
+				t.Fatal(err)
+			}
+			info, err := os.Lstat(tool)
+			if err != nil || info.Mode().Perm() != mode {
+				t.Fatalf("the fixture is not %v: %v (%v)", mode, info.Mode().Perm(), err)
+			}
+			if got := searchIn([]string{dir}, "toolish"); got.err == nil {
+				t.Fatalf("a tool at mode %v was accepted", mode)
+			}
+		})
+	}
+	// The same tool, writable only by its owner, must resolve.
 	dir := t.TempDir()
 	tool := filepath.Join(dir, "toolish")
-	if err := os.WriteFile(tool, []byte("#!/bin/sh\n"), 0o777); err != nil {
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	original := searchPath
-	t.Cleanup(func() { searchPath = original })
-	searchPath = []string{dir}
-	if got := search("toolish"); got.err == nil {
-		t.Fatal("a group and world writable tool was accepted")
+	if err := os.Chmod(tool, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := searchIn([]string{dir}, "toolish"); got.err != nil {
+		t.Fatalf("an owner-writable executable was rejected: %v", got.err)
+	}
+}
+
+// TestRefusesASymlinkedTool covers substitution through a link, which a plain
+// Stat would follow without noticing.
+func TestRefusesASymlinkedTool(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	if err := os.WriteFile(real, []byte("#!/bin/sh\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(real, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "toolish")
+	if err := os.Symlink(real, link); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if got := searchIn([]string{dir}, "toolish"); got.err == nil {
+		t.Fatal("a symlinked tool was accepted")
 	}
 }
