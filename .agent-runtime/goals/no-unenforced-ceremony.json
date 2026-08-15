@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 12,
+  "revision": 13,
   "goal": {
     "id": "no-unenforced-ceremony",
     "intent": "Every retained contract field buys enforcement and trust tooling resolves without ambient paths",
@@ -45,9 +45,38 @@
     "non_goals": [
       "Weaken any fail-closed signature or provenance check"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Merged as PR #59 after a first attempt was rejected by CI for a umask-dependent fixture, which is recorded as evidence on the omission audit rather than quietly amended.",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/59",
+            "result": "Merged to main with all four required checks green."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:22:12.263885496Z",
+        "closure": {
+          "achieved_outcome": "No contract field is retained without enforcement, the trust path has one definition that never reads PATH, and the GDS anchor states how the module is actually consumed.",
+          "cleanup": "Task branch deleted locally and on origin.",
+          "remaining": [
+            {
+              "kind": "risk",
+              "summary": "Nix and Guix hosts cannot run signature or provenance verification, because their tools sit outside every absolute directory the resolver will search. Any mechanism covering them is an ambient input into the trust path; the constraint and its reason are stated in SECURITY.md."
+            }
+          ],
+          "next_work": [
+            {
+              "type": "issue",
+              "reference": "v0.2.0",
+              "result": "Cut the release the control plane needs in order to consume any of this work, since it pins by release tag."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Nix and Guix hosts still cannot verify, because their tools are outside every absolute directory the resolver will search and any mechanism covering them is an ambient input into the trust path. Stated in the security model with the reason and the failure message that names what was searched.",
@@ -139,6 +168,6 @@
       }
     },
     "created_at": "2026-08-15T00:12:44.224755101Z",
-    "updated_at": "2026-08-15T00:18:10.11806904Z"
+    "updated_at": "2026-08-15T00:22:12.263885496Z"
   }
 }

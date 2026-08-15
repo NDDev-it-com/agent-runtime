@@ -1,7 +1,7 @@
 # Releasing the Go module/source product
 
 `release/v1alpha1.json` is the only release source of truth. The version it
-currently names is `v0.1.3`; the compatibility declaration is Go 1.25. `v0.1.2`
+currently names is `v0.2.0`; the compatibility declaration is Go 1.25. `v0.1.2`
 was the first published release. `v0.1.0` and `v0.1.1` were tagged but never
 published — the first pinned a Go toolchain below the module's own directive,
 the second read the immutable-releases setting, which the publishing token
@@ -16,10 +16,10 @@ matrix.
 
 The exact release asset set is:
 
-- `agent-runtime-v0.1.3-source.tar.gz`
-- `agent-runtime-v0.1.3.spdx.json`
-- `release-notes-v0.1.3.md`
-- `release-manifest-v0.1.3.json`
+- `agent-runtime-v0.2.0-source.tar.gz`
+- `agent-runtime-v0.2.0.spdx.json`
+- `release-notes-v0.2.0.md`
+- `release-manifest-v0.2.0.json`
 - `SHA256SUMS`
 
 The builder reads the exact Git commit tree. It rejects symlinks, gitlinks,
@@ -132,10 +132,10 @@ covers every other asset and deliberately does not checksum itself.
    `gh api repos/NDDev-it-com/agent-runtime/immutable-releases --jq '.enabled'`,
    that no tag or release exists, and that the clean local `main` equals
    `origin/main`. Nothing later re-checks the first of these.
-9. Create an annotated SSH-signed `v0.1.3` tag on that exact commit, verify it
+9. Create an annotated SSH-signed `v0.2.0` tag on that exact commit, verify it
    locally with `go run ./cmd/check-signature --tag "$(git rev-parse
-   'v0.1.3^{tag}')" --expected-commit "$(git rev-parse
-   'v0.1.3^{commit}')"`, and push only the tag.
+   'v0.2.0^{tag}')" --expected-commit "$(git rev-parse
+   'v0.2.0^{commit}')"`, and push only the tag.
 
 The tag workflow rejects reruns, wrong refs or versions, lightweight or
 unverified tags, a tag not equal to current `main`, an existing release,
@@ -160,10 +160,10 @@ Download all five assets, then run:
 
 ```sh
 sha256sum -c SHA256SUMS
-gh attestation verify agent-runtime-v0.1.3-source.tar.gz -R NDDev-it-com/agent-runtime
-gh attestation verify agent-runtime-v0.1.3.spdx.json -R NDDev-it-com/agent-runtime
-gh attestation verify release-notes-v0.1.3.md -R NDDev-it-com/agent-runtime
-gh attestation verify release-manifest-v0.1.3.json -R NDDev-it-com/agent-runtime
+gh attestation verify agent-runtime-v0.2.0-source.tar.gz -R NDDev-it-com/agent-runtime
+gh attestation verify agent-runtime-v0.2.0.spdx.json -R NDDev-it-com/agent-runtime
+gh attestation verify release-notes-v0.2.0.md -R NDDev-it-com/agent-runtime
+gh attestation verify release-manifest-v0.2.0.json -R NDDev-it-com/agent-runtime
 gh attestation verify SHA256SUMS -R NDDev-it-com/agent-runtime
 ```
 
