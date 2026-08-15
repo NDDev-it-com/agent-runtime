@@ -182,17 +182,6 @@ func (j *Job) StepUsing(prefix string) (Step, bool) {
 	return Step{}, false
 }
 
-// RunStepsContaining returns every enabled step whose run script contains token.
-func (j *Job) RunStepsContaining(token string) []Step {
-	var steps []Step
-	for _, step := range j.Steps {
-		if step.Enabled() && step.Run != "" && strings.Contains(step.Run, token) {
-			steps = append(steps, step)
-		}
-	}
-	return steps
-}
-
 // UsesActions returns the `uses` reference of every enabled step.
 func (j *Job) UsesActions() []string {
 	refs := make([]string, 0, len(j.Steps))
