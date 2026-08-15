@@ -1,0 +1,139 @@
+{
+  "schema_version": "v1alpha1",
+  "revision": 11,
+  "goal": {
+    "id": "no-unenforced-ceremony",
+    "intent": "Every retained contract field buys enforcement and trust tooling resolves without ambient paths",
+    "acceptance": [
+      {
+        "id": "no-dead-field",
+        "acceptance": "The upstream_go_mod field is deleted or verified against real upstream content",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "security-tools.json; internal/cicontract/contract.go",
+            "result": "The field is deleted from the contract file and its Go type; nothing referenced it."
+          }
+        ]
+      },
+      {
+        "id": "resolved-binaries",
+        "acceptance": "Trust binaries are resolved and identity-checked rather than hardcoded, with one source for the fact",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/trustedexec/resolve.go",
+            "result": "One resolver, fixed absolute search, never PATH, regular non-symlink and not group or world writable, shared by signatureverify and provenance."
+          }
+        ]
+      },
+      {
+        "id": "anchor-truth",
+        "acceptance": "The GDS anchor declares semver compatibility and version-tag pinning, matching how the control plane actually consumes the module",
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": ".gds/repository.yaml",
+            "result": "compatibility semver and pin_policy version-tag, with the two axes explained and the false no-semver-tag justification removed."
+          }
+        ]
+      }
+    ],
+    "non_goals": [
+      "Weaken any fail-closed signature or provenance check"
+    ],
+    "state": "active",
+    "current_phase": "closure",
+    "receipts": {
+      "completeness_omission_audit": {
+        "phase": "completeness_omission_audit",
+        "summary": "Nix and Guix hosts still cannot verify, because their tools are outside every absolute directory the resolver will search and any mechanism covering them is an ambient input into the trust path. Stated in the security model with the reason and the failure message that names what was searched.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/trustedexec TestSearchNamesWhatItLookedAt",
+            "result": "A missing tool fails naming every directory searched and stating that PATH is never read."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:12:44.466737374Z"
+      },
+      "execute": {
+        "phase": "execute",
+        "summary": "Removed upstream_go_mod from the contract file and its type, routed signatureverify and provenance through trustedexec, and set the anchor to semver and version-tag.",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "grep for /usr/bin across internal/signatureverify and internal/provenance",
+            "result": "No occurrences outside the resolver; the isolated environment has one definition."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:12:44.344133143Z"
+      },
+      "gap_plan": {
+        "phase": "gap_plan",
+        "summary": "Delete the field rather than make it executable, because nothing needs it. Give the trust tools one resolver that never reads PATH. State both axes in the anchor: what the module promises and how this estate takes it.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "internal/trustedexec",
+            "result": "A fixed ordered search over absolute directories keeps the property the hardcoded path had, and covers a Homebrew macOS host that the single path did not."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:12:44.308001589Z"
+      },
+      "orient": {
+        "phase": "orient",
+        "summary": "Three statements bought nothing. upstream_go_mod was required non-empty and read by nothing. The git executable was written as a constant in signatureverify and as a raw literal in provenance, with the isolated environment spelled out twice. The GDS anchor justified commit-contract pinning with a comment saying no semver tag existed, which stopped being true at v0.1.2.",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "security-tools.json; internal/provenance/verify.go; .gds/repository.yaml",
+            "result": "Either upstream URL could be replaced with arbitrary text with every check still green; one fact about the trust path lived in two places; the anchor contradicted four live tags and two published releases."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:12:44.266651931Z"
+      },
+      "reconcile": {
+        "phase": "reconcile",
+        "summary": "Composing the two environments naively duplicated every git configuration setting, so the shared half now lives in trustedexec and the signature verifier adds only what is specific to running git interactively.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/signatureverify TestIsolatedGitEnvironmentRejectsAmbientOverrideChannels",
+            "result": "The isolated environment is asserted against the resolver's own search path rather than a hardcoded string, so the two cannot drift."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:12:44.383787796Z"
+      },
+      "self_review": {
+        "phase": "self_review",
+        "summary": "The resolver keeps the property that made the hardcoded path defensible in the first place: no environment input decides which program rules on a signature. It is tested for that directly rather than assumed.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "internal/trustedexec TestNeverReadsThePathEnvironment",
+            "result": "With PATH pointing at a planted git, resolution still returns the fixed location."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:12:44.423642378Z"
+      },
+      "verify": {
+        "phase": "verify",
+        "summary": "gofmt, go vet, staticcheck, full tests under umask 002, race, and all seven contract checkers.",
+        "evidence": [
+          {
+            "type": "test",
+            "reference": "local gate transcript 2026-08-15",
+            "result": "All green."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:12:44.50916971Z"
+      }
+    },
+    "created_at": "2026-08-15T00:12:44.224755101Z",
+    "updated_at": "2026-08-15T00:12:44.624414366Z"
+  }
+}

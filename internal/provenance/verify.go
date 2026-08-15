@@ -25,6 +25,8 @@ import (
 	"github.com/ProtonMail/go-crypto/openpgp"
 
 	"github.com/NDDev-it-com/agent-runtime/internal/signatureverify"
+
+	"github.com/NDDev-it-com/agent-runtime/internal/trustedexec"
 )
 
 const maxAPIBytes = 8 << 20
@@ -564,9 +566,13 @@ func actionRunID(details string) (int64, error) {
 }
 
 func readSignedCommit(ctx context.Context, root, sha string) ([]byte, []byte, error) {
-	command := exec.CommandContext(ctx, "/usr/bin/git", "cat-file", "commit", sha)
+	git, err := trustedexec.Git()
+	if err != nil {
+		return nil, nil, err
+	}
+	command := exec.CommandContext(ctx, git, "cat-file", "commit", sha)
 	command.Dir = root
-	command.Env = []string{"PATH=/usr/bin:/bin", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_COUNT=0", "GIT_NO_REPLACE_OBJECTS=1"}
+	command.Env = trustedexec.Environment
 	raw, err := command.Output()
 	if err != nil {
 		return nil, nil, fmt.Errorf("read integration commit object: %w", err)

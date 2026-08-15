@@ -6,6 +6,14 @@ contract.
 
 ## [Unreleased]
 
+### Removed
+
+- `upstream_go_mod` is gone from `security-tools.json` and its Go type. It was
+  required to be non-empty and nothing read, fetched, hashed, parsed or compared
+  it, so it bought no evidence while creating another value to keep in step by
+  hand. Either URL could have been replaced with arbitrary text and every check
+  stayed green.
+
 ### Added
 
 - `cmd/check-goal-journals` holds every tracked Goal journal to the Go contract
@@ -18,6 +26,20 @@ contract.
   everything.
 
 ### Fixed
+
+- `git` and `ssh-keygen` have one definition. `internal/provenance` repeated
+  `/usr/bin/git` as a raw literal beside `internal/signatureverify`'s constant,
+  and the isolated environment was written out twice — one fact in two places
+  that could drift apart in the code path where drift matters most. Both now
+  resolve through `internal/trustedexec`, which searches a fixed ordered list of
+  absolute directories, never `PATH`, and requires the result to be a regular,
+  non-symlink file that is not group or world writable. This also lets a
+  Homebrew macOS host verify, which the single hardcoded path did not.
+- `.gds/repository.yaml` states how the module is actually consumed. Its module
+  block declared `commit-contract` and `default-branch-commit`, justified by a
+  comment saying no semver tag existed — which stopped being true at `v0.1.2`.
+  It now declares `semver` and `version-tag`, and says why those are separate
+  axes: what this repository promises a consumer, and how this estate takes it.
 
 - `.agent-runtime/goals/first-v0-release.json` is a journal this module accepts.
   It recorded each recovery cycle under an invented receipt key, which the Goal
