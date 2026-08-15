@@ -24,10 +24,9 @@ type Contract struct {
 	CompatibilityGo string `json:"compatibility_go"`
 }
 type Tool struct {
-	Module        string `json:"module"`
-	Version       string `json:"version"`
-	MinimumGo     string `json:"minimum_go"`
-	UpstreamGoMod string `json:"upstream_go_mod"`
+	Module    string `json:"module"`
+	Version   string `json:"version"`
+	MinimumGo string `json:"minimum_go"`
 }
 
 func Load(path string) (Contract, error) {
@@ -45,7 +44,7 @@ func Load(path string) (Contract, error) {
 		return Contract{}, errors.New("contract has missing or unsupported fields")
 	}
 	for name, tool := range map[string]Tool{"govulncheck": c.Govulncheck, "staticcheck": c.Staticcheck} {
-		if tool.Module == "" || tool.Version == "" || tool.MinimumGo == "" || tool.UpstreamGoMod == "" {
+		if tool.Module == "" || tool.Version == "" || tool.MinimumGo == "" {
 			return Contract{}, fmt.Errorf("contract tool %q has missing or unsupported fields", name)
 		}
 	}

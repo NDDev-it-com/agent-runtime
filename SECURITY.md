@@ -60,6 +60,23 @@ Avoid placing secrets in manifests, instructions, command arguments, logs, or
 issue reports. Captured command output may contain sensitive data and should be
 handled accordingly by callers.
 
+### Executables the trust path runs
+
+Signature and provenance verification shell out to `git` and `ssh-keygen`, so
+which file those names refer to decides what a verdict is worth. They are never
+resolved through `PATH`: the runtime searches a fixed, ordered list of absolute
+directories — `/usr/bin`, `/bin`, `/usr/local/bin`, `/opt/homebrew/bin` — and
+requires the result to be a regular, non-symlink file that is not group or
+world writable. Children of the trust path are given exactly those directories
+as their `PATH` and nothing they inherited.
+
+The cost is real and deliberate: a host that keeps its tools outside those
+directories, which in practice means Nix and Guix, cannot run verification at
+all. Every mechanism that would cover them — an environment override, a `PATH`
+search — is an ambient input into the one code path that must not have any.
+Verification fails with a message naming what was searched rather than an
+obscure exec error.
+
 ## Release integrity
 
 Official releases originate only from annotated signed `vMAJOR.MINOR.PATCH`

@@ -16,12 +16,12 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/NDDev-it-com/agent-runtime/internal/trustedexec"
 )
 
 const (
 	AllowedSignersPath   = ".github/release-allowed-signers"
-	gitExecutable        = "/usr/bin/git"
-	sshKeygenExecutable  = "/usr/bin/ssh-keygen"
 	maxAllowlistBytes    = 16 << 10
 	CanonicalPrincipal   = "danilsilantyevwork@gmail.com"
 	CanonicalFingerprint = "SHA256:3L6V7EKdHGQyLcr4NPsFC86EYbi3/7f2X6kMni7LmNI"
@@ -74,7 +74,7 @@ var canonicalTrustPolicy = trustPolicy{
 	principal: CanonicalPrincipal, keyType: "ED25519", fingerprint: CanonicalFingerprint,
 }
 
-// runner executes git, and only git, at gitExecutable. It carries no
+// runner executes git, and only git, at the path trustedexec resolves. It carries no
 // executable parameter so no call site can introduce a different binary into
 // the trust path.
 type runner interface {
@@ -90,12 +90,16 @@ type verifyOptions struct {
 type execRunner struct{}
 
 func (execRunner) run(ctx context.Context, args []string, dir string, env []string) ([]byte, []byte, error) {
-	command := exec.CommandContext(ctx, gitExecutable, args...)
+	git, err := trustedexec.Git()
+	if err != nil {
+		return nil, nil, err
+	}
+	command := exec.CommandContext(ctx, git, args...)
 	command.Dir = dir
 	command.Env = env
 	var stdout, stderr bytes.Buffer
 	command.Stdout, command.Stderr = &stdout, &stderr
-	err := command.Run()
+	err = command.Run()
 	return stdout.Bytes(), stderr.Bytes(), err
 }
 
@@ -185,10 +189,14 @@ func verifyWithOptions(ctx context.Context, request Request, policy trustPolicy,
 	if err := snapshot.revalidate(); err != nil {
 		return Result{}, err
 	}
+	sshKeygen, err := trustedexec.SSHKeygen()
+	if err != nil {
+		return Result{}, err
+	}
 	verifyArgs := []string{
 		"-c", "gpg.format=ssh",
 		"-c", "gpg.ssh.allowedSignersFile=" + snapshot.path,
-		"-c", "gpg.ssh.program=" + sshKeygenExecutable,
+		"-c", "gpg.ssh.program=" + sshKeygen,
 		"-c", "gpg.ssh.revocationFile=" + os.DevNull,
 		"-c", "gpg.minTrustLevel=fully",
 		"verify-" + string(request.Kind), "--raw", request.ObjectSHA,
@@ -364,10 +372,9 @@ func writeEvidence(writer io.Writer, data []byte, description string) error {
 }
 
 func isolatedGitEnvironment() []string {
-	environment := []string{
-		"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_COUNT=0",
-		"GIT_TERMINAL_PROMPT=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_PAGER=cat", "PAGER=cat", "LC_ALL=C", "LANG=C",
-		"PATH=/usr/bin:/bin",
-	}
-	return environment
+	// The shared half — the search path and the git configuration isolation —
+	// lives in trustedexec so the provenance verifier cannot drift from this
+	// one. Only settings specific to running git interactively are added here.
+	environment := append([]string(nil), trustedexec.Environment...)
+	return append(environment, "GIT_TERMINAL_PROMPT=0", "GIT_PAGER=cat", "PAGER=cat", "LC_ALL=C", "LANG=C")
 }

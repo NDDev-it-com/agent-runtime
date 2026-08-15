@@ -96,10 +96,13 @@ module:
     # Pinned as a gitlink by the control plane. Not vendored, not published to
     # a package registry, and not executed from its own repository.
     - "git-submodule"
-  # The published surface is `v1alpha1` and carries no semver tag, so the
-  # consumer contract is the exact pinned commit until a tagged line exists.
-  compatibility: "commit-contract"
-  pin_policy: "default-branch-commit"
+  # The module publishes semver releases with attested assets, and the control
+  # plane pins by release tag. Both halves are stated because they are separate
+  # axes: the first is what this repository promises a consumer, the second is
+  # how this estate chooses to take it. The earlier reading — no semver tag, so
+  # the contract is the pinned commit — stopped being true at v0.1.2.
+  compatibility: "semver"
+  pin_policy: "version-tag"
   publication:
     registry: "none"
     github_release: "required"

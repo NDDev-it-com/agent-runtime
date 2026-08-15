@@ -13,6 +13,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/NDDev-it-com/agent-runtime/internal/trustedexec"
 )
 
 func TestCanonicalTrustAnchorIdentity(t *testing.T) {
@@ -126,8 +128,12 @@ func TestVerifierUsesCommandLocalTrustAndPreservesCommandFailure(t *testing.T) {
 	}
 	verifyCall := commands.calls[2]
 	joined := strings.Join(verifyCall.args, " ")
+	sshKeygen, keygenErr := trustedexec.SSHKeygen()
+	if keygenErr != nil {
+		t.Fatal(keygenErr)
+	}
 	if !strings.Contains(joined, "-c gpg.format=ssh -c gpg.ssh.allowedSignersFile=") ||
-		!strings.Contains(joined, "-c gpg.ssh.program="+sshKeygenExecutable) ||
+		!strings.Contains(joined, "-c gpg.ssh.program="+sshKeygen) ||
 		!strings.Contains(joined, "-c gpg.ssh.revocationFile="+os.DevNull) ||
 		!strings.Contains(joined, "-c gpg.minTrustLevel=fully") ||
 		strings.Contains(joined, filepath.Join(fixture.repository, AllowedSignersPath)) {
@@ -179,7 +185,7 @@ func TestIsolatedGitEnvironmentRejectsAmbientOverrideChannels(t *testing.T) {
 			t.Fatalf("ambient override survived: %s", forbidden)
 		}
 	}
-	for _, required := range []string{"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_COUNT=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_PAGER=cat", "PAGER=cat", "LC_ALL=C", "LANG=C", "PATH=/usr/bin:/bin"} {
+	for _, required := range []string{"GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=" + os.DevNull, "GIT_CONFIG_COUNT=0", "GIT_NO_REPLACE_OBJECTS=1", "GIT_PAGER=cat", "PAGER=cat", "LC_ALL=C", "LANG=C", "PATH=" + trustedexec.SearchPathValue()} {
 		if !strings.Contains(joined, "\n"+required+"\n") {
 			t.Fatalf("missing isolated environment setting %q: %q", required, environment)
 		}

@@ -1,6 +1,6 @@
 {
   "schema_version": "v1alpha1",
-  "revision": 8,
+  "revision": 13,
   "goal": {
     "id": "self-verified-journals",
     "intent": "This repository's tracked Goal journals are proven valid by an executable checker",
@@ -8,30 +8,82 @@
       {
         "id": "journal-checker",
         "acceptance": "A required CI checker validates every tracked journal against the Go contract and the published schema",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": "cmd/check-goal-journals; internal/journalverify; .github/workflows/ci.yml; .gds/repository.yaml",
+            "result": "A required CI step holds every tracked journal to the Go contract and the published schema, and the CI contract requires the step so it cannot be dropped silently."
+          }
+        ]
       },
       {
         "id": "journals-valid",
         "acceptance": "goal status succeeds on every tracked journal",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "go run ./cmd/check-goal-journals",
+            "result": "goal journals valid: 9 tracked, accepted by the Goal contract and the published schema."
+          }
+        ]
       },
       {
         "id": "first-release-true",
         "acceptance": "The first-release journal states the published outcome and closes on its evidence",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "file",
+            "reference": ".agent-runtime/goals/first-v0-release.json",
+            "result": "State completed at closure with all seven criteria met, recording that the release shipped as v0.1.2 then v0.1.3, and keeping the unpublished v0.1.0 and v0.1.1 tags as declared debt."
+          }
+        ]
       },
       {
         "id": "no-shipped-invalid",
         "acceptance": "A built source archive contains no artifact the product rejects",
-        "status": "pending"
+        "status": "complete",
+        "evidence": [
+          {
+            "type": "command",
+            "reference": "source archive built from the commit, every journal extracted and fed to agent-runtime goal status",
+            "result": "All accepted; the same archive built from the previous commit still rejects first-v0-release.json."
+          }
+        ]
       }
     ],
     "non_goals": [
       "Widen the phase vocabulary to accommodate a malformed journal"
     ],
-    "state": "active",
+    "state": "completed",
     "current_phase": "closure",
     "receipts": {
+      "closure": {
+        "phase": "closure",
+        "summary": "Merged as PR #58 with all four required checks green.",
+        "evidence": [
+          {
+            "type": "link",
+            "reference": "https://github.com/NDDev-it-com/agent-runtime/pull/58",
+            "result": "Merged to main."
+          }
+        ],
+        "recorded_at": "2026-08-15T00:07:29.602650529Z",
+        "closure": {
+          "achieved_outcome": "The Goal contract has the executable checker every other contract here already had, and the module no longer ships an artifact it rejects.",
+          "cleanup": "Task branch deleted locally and on origin.",
+          "remaining": [],
+          "next_work": [
+            {
+              "type": "issue",
+              "reference": "no unenforced ceremony",
+              "result": "Delete the contract field nothing verifies, give the trust binaries one definition, and make the GDS anchor state how the module is actually consumed."
+            }
+          ]
+        }
+      },
       "completeness_omission_audit": {
         "phase": "completeness_omission_audit",
         "summary": "Registered the checker in the CI contract as well as the workflow, so it cannot be dropped from ci.yml while the contract stays green -- the same failure class the workflow model was built to close.",
@@ -118,6 +170,6 @@
       }
     },
     "created_at": "2026-08-15T00:02:27.292800011Z",
-    "updated_at": "2026-08-15T00:02:27.487402016Z"
+    "updated_at": "2026-08-15T00:07:29.602650529Z"
   }
 }
